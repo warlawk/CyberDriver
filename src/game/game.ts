@@ -261,6 +261,11 @@ export class Game {
       }
       this.hud.notify(this.radioName ? "TUNED TO " + this.radioName : "RADIO OFF", 0xff2e7e);
     }
+    if (e.code === "KeyM") {
+      const on = audio.toggleMusic();
+      audio.play("click");
+      this.hud.notify(on ? 'MUSIC ON · "MIDNIGHT COURIER"' : "MUSIC OFF", on ? 0x38ff9e : 0x7f95c8);
+    }
     if ((e.code === "KeyP" || e.code === "Escape") && (this.phase === "playing" || this.phase === "paused")) {
       if (this.phase === "playing") this.pause();
       else this.resume();
@@ -474,7 +479,10 @@ export class Game {
       const f = new THREE.Vector3(Math.sin(this.player.heading), 0, Math.cos(this.player.heading));
       this.effects.driftSmoke(pos.x - f.x * 1.8, 0.3, pos.z - f.z * 1.8);
     }
-    audio.setSkid(handbrake && Math.abs(frame.vf) > 8 ? 0.45 : frame.drifting ? 0.3 : 0);
+    audio.setSkid(
+      handbrake && Math.abs(frame.vf) > 8 ? 0.45 : frame.drifting ? 0.32 : 0,
+      clamp(frame.kmh / TOP_KMH, 0, 1)
+    );
     audio.setEngine(clamp(frame.kmh / TOP_KMH, 0, 1), throttle > 0 ? 1 : 0);
 
     // camera + effects + HUD
