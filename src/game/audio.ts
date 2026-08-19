@@ -115,31 +115,139 @@ class Buf {
 
 const midiHz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
-/** tiny step-sequenced synth for the two radio stations */
-function musicLoop(
-  bpm: number,
-  beats: number,
-  bass: number[],
-  arp: number[] | null
-): string {
-  const beat = 60 / bpm;
-  const dur = beat * beats;
-  const b = new Buf(dur + 0.1);
-  for (let i = 0; i < beats; i++) {
-    const t = i * beat;
-    b.tone(t, 0.13, 150, 42, 0.5, "sine", 14); // kick
-    b.noise(t + beat / 2, 0.04, 0.1, 60, 0.4); // hat
-    const note = bass[i % bass.length];
-    if (note > 0) b.tone(t, beat * 0.85, midiHz(note), midiHz(note), 0.22, "square", 2.2);
-    if (arp) {
-      for (let s = 0; s < 4; s++) {
-        const an = arp[(i * 4 + s) % arp.length];
-        b.tone(t + (s * beat) / 4, 0.09, midiHz(an), midiHz(an), 0.07, "triangle", 8);
+/* ------------------------------------------------------------------
+   Radio station synth. Every event is written with wrap-around
+   (sample index mod N), the buffer is exactly `beats` long, and all
+   envelopes are pure exponential decays — so the loop point is
+   mathematically seamless: a note that crosses the bar line simply
+   continues at the start of the next repetition, like real audio.
+------------------------------------------------------------------- */
+interface RadioConfig {
+  bpm: number;
+  beats: number;
+  bass?: number[]; // one MIDI note per beat (0 = rest)
+  bassEighths?: number[]; // optional 8th-note bassline (2 per beat)
+  arp?: number[]; // cycled 16th-note arpeggio
+  arpWave?: OscillatorType;
+  arpVol?: number;
+  pad?: { beat: number; midis: number[]; durBeats: number }[];
+  snareBeats?: number[];
+  hats?: "8th" | "16th";
+}
+
+function radioTrack(cfg: RadioConfig): string {
+  const beat = 60 / cfg.bpm;
+  const N = Math.round(cfg.beats * beat * SR); // exact loop length
+  const d = new Float32Array(N);
+  const add = (i: number, v: number) => {
+    d[((i % N) + N) % N] += v;
+  };
+  const at = (tSec: number) => Math.round(tSec * SR);
+
+  const note = (
+    t0s: number,
+    durS: number,
+    f0: number,
+    f1: number,
+    vol: number,
+    wave: OscillatorType,
+    decay: number,
+    attMs = 4
+  ) => {
+    const a = at(t0s);
+    const n = Math.max(4, at(durS));
+    const att = Math.min(Math.floor((attMs / 1000) * SR), n >> 2);
+    let ph = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / n;
+      ph += (2 * Math.PI * (f0 + (f1 - f0) * t)) / SR;
+      let w = 0;
+      switch (wave) {
+        case "square":
+          w = Math.sign(Math.sin(ph)) * 0.5;
+          break;
+        case "sawtooth":
+          w = (((ph % (2 * Math.PI)) / Math.PI) - 1) * 0.6;
+          break;
+        case "triangle":
+          w = (Math.asin(Math.sin(ph)) / (Math.PI / 2)) * 0.7;
+          break;
+        default:
+          w = Math.sin(ph);
+      }
+      const env = (i < att ? i / att : 1) * Math.exp((-decay * i) / SR);
+      add(a + i, w * vol * env);
+    }
+  };
+
+  const burst = (t0s: number, durS: number, vol: number, decay: number, mode: "low" | "high") => {
+    const a = at(t0s);
+    const n = Math.max(4, at(durS));
+    let lp = 0;
+    for (let i = 0; i < n; i++) {
+      let w = Math.random() * 2 - 1;
+      if (mode === "low") {
+        lp += (w - lp) * 0.12;
+        w = lp * 2.4;
+      } else {
+        lp += (w - lp) * 0.5;
+        w = (w - lp) * 1.7;
+      }
+      add(a + i, w * vol * Math.exp((-decay * i) / SR));
+    }
+  };
+
+  const kick = (t: number) => note(t, 0.16, 150, 42, 0.5, "sine", 13);
+  const snare = (t: number, vol: number) => {
+    note(t, 0.11, 196, 196, vol * 0.8, "triangle", 26);
+    burst(t, 0.1, vol, 30, "high");
+  };
+
+  // drums — four on the floor unless stated otherwise
+  for (let bI = 0; bI < cfg.beats; bI++) kick(bI * beat);
+  for (const sb of cfg.snareBeats ?? []) snare(sb * beat, 0.2);
+  if (cfg.hats === "8th") {
+    for (let bI = 0; bI < cfg.beats; bI++) burst((bI + 0.5) * beat, 0.035, 0.09, 55, "high");
+  } else if (cfg.hats === "16th") {
+    const vols = [0.09, 0.045, 0.062, 0.045];
+    for (let bI = 0; bI < cfg.beats; bI++)
+      for (let s = 0; s < 4; s++) burst((bI + s / 4) * beat, 0.03, vols[s], 58, "high");
+  }
+
+  // bass
+  if (cfg.bassEighths) {
+    for (let s = 0; s < cfg.beats * 2; s++) {
+      const m = cfg.bassEighths[s % cfg.bassEighths.length];
+      if (m > 0) note((s * beat) / 2, beat * 0.44, midiHz(m), midiHz(m), 0.18, "square", 3.4);
+    }
+  } else if (cfg.bass) {
+    for (let bI = 0; bI < cfg.beats; bI++) {
+      const m = cfg.bass[bI % cfg.bass.length];
+      if (m > 0) note(bI * beat, beat * 0.85, midiHz(m), midiHz(m), 0.2, "square", 2.2);
+    }
+  }
+
+  // arpeggio (16ths)
+  if (cfg.arp) {
+    const wave = cfg.arpWave ?? "triangle";
+    const vol = cfg.arpVol ?? 0.07;
+    for (let s = 0; s < cfg.beats * 4; s++) {
+      const m = cfg.arp[s % cfg.arp.length];
+      if (m > 0) note((s * beat) / 4, 0.09, midiHz(m), midiHz(m), vol, wave, 8);
+    }
+  }
+
+  // slow pads, slightly detuned
+  for (const p of cfg.pad ?? []) {
+    for (const m of p.midis) {
+      for (const det of [0.996, 1.004]) {
+        note(p.beat * beat, p.durBeats * beat, midiHz(m) * det, midiHz(m) * det, 0.042, "triangle", 0.85, 120);
       }
     }
   }
-  b.fadeLoop(40);
-  return b.uri();
+
+  for (let i = 0; i < N; i++) d[i] = Math.tanh(d[i] * 1.15) * 0.88;
+  return encodeWav(d);
 }
 
 /* ------------------------------------------------------------------
@@ -255,7 +363,7 @@ export type SfxName =
   | "cash"
   | "chatter";
 
-export const RADIO_STATIONS = ["NEON FM 88.1", "SYNTHWAVE 95.4"];
+export const RADIO_STATIONS = ["NEON FM 88.1", "TURBO 112.5", "SYNTHWAVE 95.4"];
 
 class AudioManager {
   private one: Partial<Record<SfxName, Howl>> = {};
@@ -305,15 +413,54 @@ class AudioManager {
     this.ambience.play();
 
     this.radios = [
+      // driving synthwave — the city's default soundtrack
       new Howl({
-        src: [musicLoop(104, 8, [33, 0, 36, 33, 31, 0, 36, 38], [57, 60, 64, 67, 64, 60, 67, 64])],
+        src: [
+          radioTrack({
+            bpm: 104,
+            beats: 8,
+            bass: [33, 0, 36, 33, 31, 0, 36, 38],
+            arp: [57, 60, 64, 67, 64, 60, 67, 64],
+            hats: "8th",
+          }),
+        ],
         loop: true,
-        volume: 0.34,
+        volume: 0.42,
       }),
+      // punchy electro — 8th-note bass, 16th hats, claps
       new Howl({
-        src: [musicLoop(88, 8, [45, 45, 0, 43, 41, 0, 43, 40], [69, 72, 76, 72, 69, 76, 72, 69])],
+        src: [
+          radioTrack({
+            bpm: 112,
+            beats: 8,
+            bassEighths: [36, 0, 36, 0, 39, 0, 36, 0, 36, 0, 36, 0, 34, 0, 31, 0],
+            arp: [60, 63, 67, 70, 67, 63, 60, 63],
+            arpWave: "square",
+            arpVol: 0.042,
+            snareBeats: [2, 6],
+            hats: "16th",
+          }),
+        ],
         loop: true,
-        volume: 0.34,
+        volume: 0.42,
+      }),
+      // dreamy slow wave — pads over a soft pulse
+      new Howl({
+        src: [
+          radioTrack({
+            bpm: 88,
+            beats: 8,
+            bass: [45, 45, 0, 43, 41, 0, 43, 40],
+            arp: [69, 72, 76, 72, 69, 76, 72, 69],
+            hats: "8th",
+            pad: [
+              { beat: 0, midis: [57, 60, 64], durBeats: 4 },
+              { beat: 4, midis: [53, 57, 60], durBeats: 4 },
+            ],
+          }),
+        ],
+        loop: true,
+        volume: 0.42,
       }),
     ];
     // the city has a soundtrack from second one — the radio starts live
