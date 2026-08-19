@@ -4,7 +4,7 @@ import type { MissionPhase } from "./utils";
 import { disposeDeep } from "./textures";
 
 const CYAN = 0x26e6ff;
-const MAGENTA = 0xff2e7e;
+const GREEN = 0x38ff9e;
 
 /**
  * Objective indicator: one chunky extruded 3D arrow that yaws to point at
@@ -75,9 +75,9 @@ export class ObjectiveMarker {
   update(dt: number, px: number, pz: number, tx: number, tz: number, phase: MissionPhase, t: number) {
     if (phase !== this.lastPhase) {
       this.lastPhase = phase;
-      const col = phase === "pickup" ? CYAN : MAGENTA;
+      const col = phase === "pickup" ? CYAN : GREEN;
       this.mat.emissive.setHex(col);
-      this.mat.color.setHex(phase === "pickup" ? 0x0b3340 : 0x3d0b22);
+      this.mat.color.setHex(phase === "pickup" ? 0x0b3340 : 0x0b3d24);
     }
 
     this.group.position.set(px, 6.4 + Math.sin(t * 3.1) * 0.3, pz);

@@ -6,6 +6,7 @@ const CYAN = 0x26e6ff;
 const MAGENTA = 0xff2e7e;
 const YELLOW = 0xffe14d;
 const RED = 0xff3355;
+const GREEN = 0x38ff9e;
 const PANEL = 0x070b18;
 
 const DISPLAY = "Orbitron";
@@ -383,7 +384,7 @@ export class HUD {
     // mission
     const isPickup = s.phase === "pickup";
     setText(this.phaseTxt, isPickup ? "PICKUP PACKAGE" : "DELIVER PACKAGE");
-    this.phaseTxt.style.fill = isPickup ? CYAN : MAGENTA;
+    this.phaseTxt.style.fill = isPickup ? CYAN : GREEN;
     setText(this.codeTxt, "SEC " + s.code);
     const last = s.route.length ? s.route[s.route.length - 1] : null;
     if (last) {
@@ -393,7 +394,7 @@ export class HUD {
       this.chevron.rotation = -bearing + Math.PI;
     }
     this.chevron.clear();
-    this.chevron.poly([0, -16, 13, 10, 0, 2, -13, 10]).fill({ color: isPickup ? CYAN : MAGENTA, alpha: 0.95 });
+    this.chevron.poly([0, -16, 13, 10, 0, 2, -13, 10]).fill({ color: isPickup ? CYAN : GREEN, alpha: 0.95 });
     if (s.hasPackage !== this.lastPkg) {
       this.lastPkg = s.hasPackage;
       this.pkgG.clear();
@@ -420,8 +421,8 @@ export class HUD {
       const tx = this.mapPx(last.x);
       const tz = this.mapPx(last.z);
       const pr = 6 + Math.sin(this.t * 5) * 2.4;
-      md.circle(tx, tz, pr).stroke({ color: isPickup ? CYAN : MAGENTA, width: 2.4 });
-      md.circle(tx, tz, 2.6).fill({ color: isPickup ? CYAN : MAGENTA });
+      md.circle(tx, tz, pr).stroke({ color: isPickup ? CYAN : GREEN, width: 2.4 });
+      md.circle(tx, tz, 2.6).fill({ color: isPickup ? CYAN : GREEN });
     }
     const px = this.mapPx(s.px);
     const pz = this.mapPx(s.pz);

@@ -177,7 +177,7 @@ export class DeliverySystem {
   private setMarker(node: IntersectionNode, phase: "pickup" | "deliver") {
     this.marker.position.set(node.x, 0, node.z);
     this.marker.visible = true;
-    const col = phase === "pickup" ? 0x26e6ff : 0xff2e7e;
+    const col = phase === "pickup" ? 0x26e6ff : 0x38ff9e;
     this.beamMat.color.setHex(col);
     this.ringMat.color.setHex(col);
     this.padMat.color.setHex(col);

@@ -510,20 +510,21 @@ export function generateCity(seed: number): CityData {
     if (dotMesh.instanceColor) dotMesh.instanceColor.needsUpdate = true;
   });
 
-  /* --- parked cars: real car silhouettes (merged body+cabin, instanced) --- */
+  /* --- parked cars: exact traffic-car silhouette, but with lights off / muted --- */
   const parkedCount = 40;
-  const pcBody = new THREE.BoxGeometry(4.1, 0.9, 1.9).translate(0, 0.62, 0);
-  const pcSkirt = new THREE.BoxGeometry(4.35, 0.3, 1.82).translate(0, 0.22, 0);
-  const pcCabin = new THREE.BoxGeometry(2.2, 0.62, 1.62).translate(-0.2, 1.36, 0);
-  const pcBodyGeo = mergeGeometries([pcBody, pcSkirt, pcCabin])!;
-  const pcGlassGeo = new THREE.BoxGeometry(2.0, 0.3, 1.68).translate(-0.2, 1.48, 0);
-  const pcTailGeo = mergeGeometries([
-    new THREE.BoxGeometry(0.1, 0.18, 0.42).translate(-2.06, 0.72, 0.6),
-    new THREE.BoxGeometry(0.1, 0.18, 0.42).translate(-2.06, 0.72, -0.6),
+  // same boxes & offsets as TrafficSystem.makeCar (front faces +Z, no side windows)
+  const pcBodyGeo = mergeGeometries([
+    new THREE.BoxGeometry(1.9, 0.95, 4.1).translate(0, 0.75, 0),
+    new THREE.BoxGeometry(1.6, 0.72, 1.9).translate(0, 1.5, -0.25),
   ])!;
+  const pcGlassGeo = new THREE.BoxGeometry(1.5, 0.4, 0.12).translate(0, 1.5, 0.72); // front windshield only
   const pcHeadGeo = mergeGeometries([
-    new THREE.BoxGeometry(0.1, 0.18, 0.42).translate(2.06, 0.72, 0.6),
-    new THREE.BoxGeometry(0.1, 0.18, 0.42).translate(2.06, 0.72, -0.6),
+    new THREE.BoxGeometry(0.42, 0.2, 0.1).translate(0.6, 0.72, 2.06),
+    new THREE.BoxGeometry(0.42, 0.2, 0.1).translate(-0.6, 0.72, 2.06),
+  ])!;
+  const pcTailGeo = mergeGeometries([
+    new THREE.BoxGeometry(0.44, 0.22, 0.1).translate(0.62, 0.8, -2.06),
+    new THREE.BoxGeometry(0.44, 0.22, 0.1).translate(-0.62, 0.8, -2.06),
   ])!;
   const parked = new THREE.InstancedMesh(
     pcBodyGeo,
@@ -532,17 +533,17 @@ export function generateCity(seed: number): CityData {
   );
   const parkedGlass = new THREE.InstancedMesh(
     pcGlassGeo,
-    new THREE.MeshBasicMaterial({ color: 0x7fc4e8 }),
-    parkedCount
-  );
-  const parkedTail = new THREE.InstancedMesh(
-    pcTailGeo,
-    new THREE.MeshBasicMaterial({ color: 0x881122 }),
+    new THREE.MeshLambertMaterial({ color: 0x182430 }), // dark glass, lights off
     parkedCount
   );
   const parkedHead = new THREE.InstancedMesh(
     pcHeadGeo,
-    new THREE.MeshLambertMaterial({ color: 0x39415a }),
+    new THREE.MeshLambertMaterial({ color: 0x2c3550 }), // headlights off
+    parkedCount
+  );
+  const parkedTail = new THREE.InstancedMesh(
+    pcTailGeo,
+    new THREE.MeshLambertMaterial({ color: 0x381018 }), // tail lights off
     parkedCount
   );
   for (let i = 0; i < parkedCount; i++) {
@@ -559,16 +560,17 @@ export function generateCity(seed: number): CityData {
       continue;
     }
     dummy.position.set(px, 0.03, pz);
-    dummy.rotation.set(0, axisH ? (side > 0 ? 0 : Math.PI) : side > 0 ? Math.PI / 2 : -Math.PI / 2, 0);
+    // local front (+Z) points along the road
+    dummy.rotation.set(0, axisH ? (side > 0 ? -Math.PI / 2 : Math.PI / 2) : side > 0 ? 0 : Math.PI, 0);
     dummy.updateMatrix();
     parked.setMatrixAt(i, dummy.matrix);
-    parked.setColorAt(i, cTmp.setHex(pick(rng, CAR_COLORS)));
+    parked.setColorAt(i, cTmp.setHex(pick(rng, CAR_COLORS)).multiplyScalar(0.8));
     parkedGlass.setMatrixAt(i, dummy.matrix);
-    parkedTail.setMatrixAt(i, dummy.matrix);
     parkedHead.setMatrixAt(i, dummy.matrix);
+    parkedTail.setMatrixAt(i, dummy.matrix);
     colliders.push({ kind: "circle", x: px, z: pz, r: 2.2 });
   }
-  group.add(parked, parkedGlass, parkedTail, parkedHead);
+  group.add(parked, parkedGlass, parkedHead, parkedTail);
 
   /* --- construction barriers (proper barricades: feet, striped boards, lamp, cones) --- */
   const boardTex = toTex(barrierStripeCanvas(), { repeatX: 2 });
