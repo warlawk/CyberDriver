@@ -9,6 +9,7 @@ import { DeliverySystem } from "./delivery";
 import { HUD } from "./hud";
 import { AssetManager } from "./assets";
 import { audio } from "./audio";
+import { ObjectiveMarker } from "./marker";
 import { setAtmosphere } from "./particles";
 import type { GamePhase, HudSnapshot, RunStats } from "./utils";
 import { clamp, damp } from "./utils";
@@ -52,6 +53,7 @@ export class Game {
   private assets = new AssetManager();
   private extraAnimators: ((t: number, dt: number) => void)[] = [];
   private holoGroup: THREE.Group | null = null;
+  private marker!: ObjectiveMarker;
 
   private keys = new Set<string>();
   private seed = Math.floor(Math.random() * 1e9);
@@ -114,6 +116,7 @@ export class Game {
   async init() {
     this.world = new World(this.container);
     await this.hud.init(this.hudEl);
+    this.marker = new ObjectiveMarker(this.world.scene);
     this.buildCity();
     window.addEventListener("resize", this.onResize);
     window.addEventListener("keydown", this.onKeyDown);
@@ -279,6 +282,7 @@ export class Game {
     switch (this.phase) {
       case "title":
       case "gameover":
+        this.marker.show(false);
         this.world.updateOrbit(dt);
         this.traffic.update(dt, this.t, this.player.pos.x, this.player.pos.z, 0, 0);
         this.runAnimators(dt);
@@ -302,6 +306,11 @@ export class Game {
         this.runAnimators(dt);
         this.delivery.update(dt, this.t);
         this.effects.update(dt, this.player.pos.x, this.player.pos.z);
+        if (this.delivery.mission) {
+          const mt = this.delivery.mission.target;
+          this.marker.show(true);
+          this.marker.update(dt, this.player.pos.x, this.player.pos.z, mt.x, mt.z, this.delivery.mission.phase, this.t);
+        }
         this.world.updateChase(dt, this.player.pos.x, this.player.pos.z, this.player.heading, 0, this.shakeV.set(0, 0, 0));
         this.updateSnap(0, false, false);
         this.hud.setVisible(true);
@@ -451,6 +460,15 @@ export class Game {
       this.delivery.replanRoute(pos.x, pos.z);
     }
 
+    // objective indicator above the van
+    const mm = this.delivery.mission;
+    if (mm && !wrecked) {
+      this.marker.show(true);
+      this.marker.update(dt, pos.x, pos.z, mm.target.x, mm.target.z, mm.phase, this.t);
+    } else {
+      this.marker.show(false);
+    }
+
     // drift smoke + skid audio
     if (frame.drifting) {
       const f = new THREE.Vector3(Math.sin(this.player.heading), 0, Math.cos(this.player.heading));
@@ -584,6 +602,7 @@ export class Game {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     this.assets.dispose();
+    this.marker.dispose();
     this.hud.dispose();
     this.world.dispose();
     audio.dispose();
