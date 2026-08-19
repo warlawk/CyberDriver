@@ -16,6 +16,28 @@ interface Car {
   cruising: number;
   lane: number;
   braking: boolean;
+  x: number;
+  z: number;
+  turn: Turn | null;
+}
+
+/** cubic-bezier arc through an intersection, tangents aligned with both lanes */
+interface Turn {
+  t: number;
+  dur: number;
+  p0x: number;
+  p0z: number;
+  c0x: number;
+  c0z: number;
+  c1x: number;
+  c1z: number;
+  p1x: number;
+  p1z: number;
+  axis: "h" | "v";
+  lineIdx: number;
+  dir: 1 | -1;
+  lane: number;
+  s: number;
 }
 
 const TARGET_COUNT = 26;
@@ -109,6 +131,9 @@ export class TrafficSystem {
       cruising: rand(this.rng, 8.5, 14),
       lane: this.laneFor(axis, dir),
       braking: false,
+      x,
+      z,
+      turn: null,
     };
     car.nextLineIdx = this.nextIdx(lineIdx, s, dir);
     return car;
@@ -153,10 +178,37 @@ export class TrafficSystem {
 
     for (let i = this.cars.length - 1; i >= 0; i--) {
       const c = this.cars[i];
-      const pos = this.worldPos(c);
+      const pos = { x: c.x, z: c.z };
       if (Math.hypot(pos.x - px, pos.z - pz) > 210) {
         this.group.remove(c.group);
         this.cars.splice(i, 1);
+        continue;
+      }
+
+      // mid-turn: follow the bezier arc, heading from the curve tangent
+      if (c.turn) {
+        const tn = c.turn;
+        tn.t += dt / tn.dur;
+        const tt = Math.min(1, tn.t);
+        const u = 1 - tt;
+        const bx = u * u * u * tn.p0x + 3 * u * u * tt * tn.c0x + 3 * u * tt * tt * tn.c1x + tt * tt * tt * tn.p1x;
+        const bz = u * u * u * tn.p0z + 3 * u * u * tt * tn.c0z + 3 * u * tt * tt * tn.c1z + tt * tt * tt * tn.p1z;
+        const dx = 3 * u * u * (tn.c0x - tn.p0x) + 6 * u * tt * (tn.c1x - tn.c0x) + 3 * tt * tt * (tn.p1x - tn.c1x);
+        const dz = 3 * u * u * (tn.c0z - tn.p0z) + 6 * u * tt * (tn.c1z - tn.c0z) + 3 * tt * tt * (tn.p1z - tn.c1z);
+        c.x = bx;
+        c.z = bz;
+        c.group.position.set(bx, 0.03, bz);
+        c.group.rotation.y = Math.atan2(dx, dz);
+        c.tailMat.color.setHex(0xaa1122);
+        if (tt >= 1) {
+          c.axis = tn.axis;
+          c.lineIdx = tn.lineIdx;
+          c.dir = tn.dir;
+          c.lane = tn.lane;
+          c.s = tn.s;
+          c.turn = null;
+          c.nextLineIdx = this.nextIdx(c.lineIdx, c.s, c.dir);
+        }
         continue;
       }
 
@@ -211,23 +263,56 @@ export class TrafficSystem {
         const atEnd =
           (c.dir === 1 && c.nextLineIdx === this.city.lines.length - 1) ||
           (c.dir === -1 && c.nextLineIdx === 0);
-        const turn = atEnd || chance(this.rng, 0.42);
-        if (turn) {
-          const oldLine = this.city.lines[c.lineIdx];
-          const crossedLine = this.city.lines[c.nextLineIdx];
-          c.axis = c.axis === "h" ? "v" : "h";
-          c.lineIdx = c.nextLineIdx;
-          c.s = oldLine;
-          c.dir = atEnd ? ((-c.dir) as 1 | -1) : chance(this.rng, 0.5) ? 1 : -1;
-          c.lane = this.laneFor(c.axis, c.dir);
-          c.s += c.dir * 0.8;
-          c.group.rotation.y = this.headingOf(c.axis, c.dir);
-          void crossedLine;
+        const wantTurn = atEnd || chance(this.rng, 0.42);
+        if (wantTurn) {
+          const oldAxis = c.axis;
+          const oldDir = c.dir;
+          const newAxis: "h" | "v" = oldAxis === "h" ? "v" : "h";
+          const newLineIdx = c.nextLineIdx;
+          const newDir: 1 | -1 = atEnd ? ((-oldDir) as 1 | -1) : chance(this.rng, 0.5) ? 1 : -1;
+          const newLane = this.laneFor(newAxis, newDir);
+          const oldLine = this.city.lines[c.lineIdx]; // intersection coord along the new axis
+          const lead = 7;
+          const p0 = { x: c.x, z: c.z };
+          const t0x = Math.sin(this.headingOf(oldAxis, oldDir));
+          const t0z = Math.cos(this.headingOf(oldAxis, oldDir));
+          const t1x = Math.sin(this.headingOf(newAxis, newDir));
+          const t1z = Math.cos(this.headingOf(newAxis, newDir));
+          const p1 = this.worldPos({
+            axis: newAxis,
+            lineIdx: newLineIdx,
+            s: oldLine + newDir * lead,
+            lane: newLane,
+          });
+          const chord = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+          const k = clamp(chord * 0.42, 4, 12);
+          const turnSpeed = clamp(c.speed, 5.5, 10);
+          c.turn = {
+            t: 0,
+            dur: (chord * 1.25) / turnSpeed,
+            p0x: p0.x,
+            p0z: p0.z,
+            c0x: p0.x + t0x * k,
+            c0z: p0.z + t0z * k,
+            c1x: p1.x - t1x * k,
+            c1z: p1.z - t1z * k,
+            p1x: p1.x,
+            p1z: p1.z,
+            axis: newAxis,
+            lineIdx: newLineIdx,
+            dir: newDir,
+            lane: newLane,
+            s: oldLine + newDir * lead,
+          };
+          c.speed = turnSpeed;
+          c.braking = false;
         }
-        c.nextLineIdx = this.nextIdx(c.lineIdx, c.s, c.dir);
+        if (!c.turn) c.nextLineIdx = this.nextIdx(c.lineIdx, c.s, c.dir);
       }
 
       const p = this.worldPos(c);
+      c.x = p.x;
+      c.z = p.z;
       c.group.position.set(p.x, 0.03, p.z);
       c.tailMat.color.setHex(c.braking ? 0xff2233 : 0xaa1122);
     }
@@ -237,14 +322,11 @@ export class TrafficSystem {
 
   /** dynamic circle colliders for the crash system */
   circles(): { x: number; z: number; r: number; car: Car }[] {
-    return this.cars.map((c) => {
-      const p = this.worldPos(c);
-      return { x: p.x, z: p.z, r: 1.5, car: c };
-    });
+    return this.cars.map((c) => ({ x: c.x, z: c.z, r: 1.5, car: c }));
   }
 
   dots(): TrafficDot[] {
-    return this.cars.map((c) => this.worldPos(c));
+    return this.cars.map((c) => ({ x: c.x, z: c.z }));
   }
 
   /** shove a car after being hit */
