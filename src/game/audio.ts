@@ -108,6 +108,20 @@ class Buf {
     }
     return this;
   }
+  /**
+   * Circular crossfade: blends the tail into the head and trims it, so
+   * noise loops stay at full level across the loop point instead of
+   * dipping to silence every repeat (what fadeLoop does at both edges).
+   */
+  crossfade(ms = 120) {
+    const M = Math.min(Math.floor((ms / 1000) * SR), Math.floor(this.data.length / 3));
+    for (let i = 0; i < M; i++) {
+      const t = i / M;
+      this.data[i] = this.data[i] * t + this.data[this.data.length - M + i] * (1 - t);
+    }
+    this.data = this.data.slice(0, this.data.length - M);
+    return this;
+  }
   uri() {
     return encodeWav(this.data);
   }
@@ -282,8 +296,8 @@ function engineLoopUri(): string {
 }
 
 function roadLoopUri(): string {
-  const b = new Buf(1.2).noise(0, 1.2, 0.5, 0, 0.05);
-  b.fadeLoop(80);
+  const b = new Buf(1.6).noise(0, 1.6, 0.5, 0, 0.05);
+  b.crossfade(140);
   return b.uri();
 }
 
@@ -325,37 +339,39 @@ function skidHissUri(): string {
 }
 
 /* ------------------------------------------------------------------
-   High tyre squeal: two detuned wavering sine voices around 2–2.6 kHz
-   with fast pitch jitter, gated by an 18 Hz scrub LFO. Gives the skid
-   its sharp top register instead of just a sweep.
+   Tyre squeal: detuned saw pair in a low-mid register, pitch-smeared
+   by filtered noise and hard-driven. Modulation is continuous and
+   slow (no rectified gating) so it sustains a harsh grind instead of
+   fluttering like a bird.
 ------------------------------------------------------------------- */
 function skidSquealUri(): string {
-  // harsh stressed-rubber: detuned saw pair in a lower register, pitch
-  // smeared by filtered noise (not clean vibrato), then driven into a
-  // light low-pass + hard saturation so it grinds instead of whistling
   const dur = 1.6;
   const b = new Buf(dur);
   const N = b.data.length;
   let ph1 = 0;
   let ph2 = 0;
   let nzF = 0; // slow-filtered noise -> frequency smear
+  let nzA = 0; // second, even slower noise -> amplitude swell
   let lpS = 0; // one-pole top-tamer
   const TWO_PI = 2 * Math.PI;
   for (let i = 0; i < N; i++) {
     const t = i / SR;
-    nzF += (Math.random() * 2 - 1 - nzF) * 0.015;
-    const smear = nzF * 110;
-    const wobble = Math.sin(TWO_PI * 6.5 * t) * 38 + Math.sin(TWO_PI * 11.3 * t + 1) * 22;
-    const f1 = 640 + wobble + smear;
-    const f2 = 892 - wobble * 0.7 + smear * 1.35;
+    nzF += (Math.random() * 2 - 1 - nzF) * 0.012;
+    nzA += (Math.random() * 2 - 1 - nzA) * 0.004;
+    const smear = nzF * 90;
+    const wobble = Math.sin(TWO_PI * 4.6 * t) * 26 + Math.sin(TWO_PI * 8.9 * t + 1) * 14;
+    const f1 = 620 + wobble + smear;
+    const f2 = 875 - wobble * 0.7 + smear * 1.3;
     ph1 += (TWO_PI * f1) / SR;
     ph2 += (TWO_PI * f2) / SR;
     const saw1 = (ph1 % TWO_PI) / Math.PI - 1;
     const saw2 = (ph2 % TWO_PI) / Math.PI - 1;
     lpS += (saw1 * 0.6 + saw2 * 0.5 - lpS) * 0.3;
-    const scrub = 0.35 + 0.65 * Math.max(0, Math.sin(TWO_PI * 17 * t + 0.7));
-    const growl = 0.55 + 0.45 * Math.sin(TWO_PI * 5.3 * t);
-    b.data[i] = Math.tanh(lpS * scrub * growl * 2.6) * 0.42;
+    // continuous modulation only — a slow swell plus gentle filtered-noise
+    // breathing; no hard gating, so no flutter/drumming
+    const swell = 0.72 + 0.28 * Math.sin(TWO_PI * 3.1 * t + 0.4);
+    const breath = 0.82 + 0.18 * nzA;
+    b.data[i] = Math.tanh(lpS * swell * breath * 3.1) * 0.44;
   }
   b.fadeLoop(40);
   return b.uri();
@@ -413,15 +429,18 @@ class AudioManager {
     this.skidSqueal = new Howl({ src: [skidSquealUri()], loop: true, volume: 0 });
     this.skidSqueal.play();
 
-    const rn = new Buf(2.6).noise(0, 2.6, 0.4, 0, 0.12).fadeLoop(60);
+    // rain: seamless via circular crossfade — no volume dip at the loop point
+    const rn = new Buf(3.4).noise(0, 3.4, 0.4, 0, 0.12).crossfade(160);
     this.rain = new Howl({ src: [rn.uri()], loop: true, volume: 0 });
     this.rain.play();
 
+    // city hum: 50/100 Hz are integer cycles over 3.2 s, so the tones are
+    // periodic across the loop; the noise floor is crossfaded
     const amb = new Buf(3.2)
-      .tone(0, 3.2, 52, 52, 0.05, "sine")
-      .tone(0, 3.2, 104.5, 104.5, 0.03, "triangle")
+      .tone(0, 3.2, 50, 50, 0.05, "sine")
+      .tone(0, 3.2, 100, 100, 0.03, "triangle")
       .noise(0, 3.2, 0.035, 0, 0.05)
-      .fadeLoop(80);
+      .crossfade(140);
     this.ambience = new Howl({ src: [amb.uri()], loop: true, volume: 0.5 });
     this.ambience.play();
 
@@ -580,15 +599,21 @@ class AudioManager {
     this.rain.fade(this.rain.volume(), this.rainTarget, 1500);
   }
 
-  /** returns station name or null when off */
+  /** cycles NEON FM → TURBO → SYNTHWAVE → OFF → NEON FM…; returns station name or null when off */
   toggleRadio(): string | null {
     if (!this.ready) return null;
+    this.radios[this.radioIdx].stop();
     if (this.radioOn) {
-      this.radios[this.radioIdx].stop();
-      this.radioOn = false;
-      return null;
+      // next slot; the slot after the last station is "off"
+      this.radioIdx = (this.radioIdx + 1) % (this.radios.length + 1);
+      if (this.radioIdx === this.radios.length) {
+        this.radioOn = false;
+        return null;
+      }
+    } else {
+      this.radioIdx = this.radioIdx % this.radios.length;
+      this.radioOn = true;
     }
-    this.radioOn = true;
     this.radios[this.radioIdx].play();
     return RADIO_STATIONS[this.radioIdx];
   }
