@@ -330,19 +330,32 @@ function skidHissUri(): string {
    its sharp top register instead of just a sweep.
 ------------------------------------------------------------------- */
 function skidSquealUri(): string {
+  // harsh stressed-rubber: detuned saw pair in a lower register, pitch
+  // smeared by filtered noise (not clean vibrato), then driven into a
+  // light low-pass + hard saturation so it grinds instead of whistling
   const dur = 1.6;
   const b = new Buf(dur);
   const N = b.data.length;
   let ph1 = 0;
   let ph2 = 0;
+  let nzF = 0; // slow-filtered noise -> frequency smear
+  let lpS = 0; // one-pole top-tamer
+  const TWO_PI = 2 * Math.PI;
   for (let i = 0; i < N; i++) {
     const t = i / SR;
-    const f1 = 2100 + 340 * Math.sin(2 * Math.PI * 6.3 * t) + 170 * Math.sin(2 * Math.PI * 23.7 * t);
-    const f2 = 2580 + 300 * Math.sin(2 * Math.PI * 7.1 * t + 1.3);
-    ph1 += (2 * Math.PI * f1) / SR;
-    ph2 += (2 * Math.PI * f2) / SR;
-    const scrub = 0.55 + 0.45 * Math.sin(2 * Math.PI * 17.3 * t);
-    b.data[i] = (Math.sin(ph1) * 0.6 + Math.sin(ph2) * 0.4) * 0.5 * scrub;
+    nzF += (Math.random() * 2 - 1 - nzF) * 0.015;
+    const smear = nzF * 110;
+    const wobble = Math.sin(TWO_PI * 6.5 * t) * 38 + Math.sin(TWO_PI * 11.3 * t + 1) * 22;
+    const f1 = 640 + wobble + smear;
+    const f2 = 892 - wobble * 0.7 + smear * 1.35;
+    ph1 += (TWO_PI * f1) / SR;
+    ph2 += (TWO_PI * f2) / SR;
+    const saw1 = (ph1 % TWO_PI) / Math.PI - 1;
+    const saw2 = (ph2 % TWO_PI) / Math.PI - 1;
+    lpS += (saw1 * 0.6 + saw2 * 0.5 - lpS) * 0.3;
+    const scrub = 0.35 + 0.65 * Math.max(0, Math.sin(TWO_PI * 17 * t + 0.7));
+    const growl = 0.55 + 0.45 * Math.sin(TWO_PI * 5.3 * t);
+    b.data[i] = Math.tanh(lpS * scrub * growl * 2.6) * 0.42;
   }
   b.fadeLoop(40);
   return b.uri();
@@ -555,10 +568,10 @@ class AudioManager {
     const jS = 0.82 + 0.18 * Math.sin(t * 34.1 + 4);
     this.skidGroan.rate(0.85 + speedNorm * 0.5);
     this.skidHiss.rate(0.9 + speedNorm * 0.7);
-    this.skidSqueal.rate(0.9 + speedNorm * 0.45);
+    this.skidSqueal.rate(0.85 + speedNorm * 0.35);
     this.skidGroan.volume(Math.min(0.42, this.skidAmt * (0.55 - 0.22 * speedNorm) * jG));
     this.skidHiss.volume(Math.min(0.4, this.skidAmt * (0.18 + 0.34 * speedNorm) * jH));
-    this.skidSqueal.volume(Math.min(0.26, this.skidAmt * (0.3 + 0.4 * speedNorm) * jS));
+    this.skidSqueal.volume(Math.min(0.24, this.skidAmt * (0.26 + 0.34 * speedNorm) * jS));
   }
 
   setRain(on: boolean) {
