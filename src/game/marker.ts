@@ -53,16 +53,13 @@ export class ObjectiveMarker {
       emissiveIntensity: 0.55,
     });
     const body = new THREE.Mesh(geo, this.mat);
-    const edges = new THREE.Mesh(
-      geo,
-      new THREE.MeshBasicMaterial({
-        color: 0xeafcff,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.38,
-      })
+    // outline only: sharp feature edges, no triangle clutter on the faces
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo, 20),
+      new THREE.LineBasicMaterial({ color: 0xeafcff, transparent: true, opacity: 0.8 })
     );
     this.spin.add(body, edges);
+    this.spin.scale.setScalar(0.5); // ~half the previous footprint
     this.pitch.add(this.spin);
     this.pitch.rotation.x = -0.42; // tilt the tip up toward the chase camera
     this.yaw.add(this.pitch);
@@ -98,7 +95,7 @@ export class ObjectiveMarker {
     // glow + scale pulse, stronger when closing in
     this.mat.emissiveIntensity = 0.5 + 0.5 * hot + 0.12 * Math.sin(t * (4 + 6 * hot));
     const pulse = 1 + (0.05 + 0.14 * hot) * Math.sin(t * (4 + 5 * hot));
-    this.spin.scale.setScalar(pulse);
+    this.spin.scale.setScalar(0.5 * pulse);
   }
 
   dispose() {
