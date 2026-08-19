@@ -339,69 +339,12 @@ function skidHissUri(): string {
 }
 
 /* ------------------------------------------------------------------
-   Turning / tyre sounds — five debug-switchable flavors (cycle G).
-   Rule: pitch NEVER moves (that's what made the old ones whistle).
-   Tones are loop-periodic (f · 1.6 s = integer cycles); only
-   amplitude and texture are modulated, via slow noise walks.
+   Turning / tyre grind: a low heavy square-ish scrape with zero high
+   content. Pitch never moves (93.75 Hz = 150 cycles over the 1.6 s
+   loop, so it's seamless); only amplitude breathes via a noise walk.
 ------------------------------------------------------------------- */
-
-/** 1 — BRAKE SQUEAL: fixed narrow resonant "eeee" with rough amplitude */
-function skidSquealUri1(): string {
-  const dur = 1.6; // 1250 Hz = 2000 cycles, 1874.375 Hz = 2999 cycles
-  const b = new Buf(dur);
-  const N = b.data.length;
-  let walk = 0; // slow amplitude random-walk
-  let walk2 = 0;
-  const TWO_PI = 2 * Math.PI;
-  for (let i = 0; i < N; i++) {
-    const t = i / SR;
-    walk += (Math.random() * 2 - 1 - walk) * 0.02;
-    walk2 += (Math.random() * 2 - 1 - walk2) * 0.006;
-    const s = Math.sin(TWO_PI * 1250 * t) * 0.55 + Math.sin(TWO_PI * 1874.375 * t) * 0.22;
-    const rough = 0.62 + 0.38 * walk; // amplitude-only roughness
-    const floor = 0.75 + 0.25 * walk2;
-    b.data[i] = s * rough * floor * 0.5;
-  }
-  b.crossfade(160);
-  return b.uri();
-}
-
-/** 2 — ABS CHATTER: rapid dry stick-slip impulse train (ratcheting skid) */
-function skidSquealUri2(): string {
+function skidSquealUri(): string {
   const dur = 1.6;
-  const b = new Buf(dur);
-  const N = b.data.length;
-  const d = b.data;
-  // bursts of short high-noise ticks, jittered ~36 Hz
-  let i = 0;
-  let period = 0.028;
-  while (i < N) {
-    period *= 1 + (Math.random() * 2 - 1) * 0.18; // timing jitter, no pitch
-    period = Math.max(0.019, Math.min(0.04, period));
-    const len = Math.floor((0.006 + Math.random() * 0.005) * SR);
-    const amp = 0.5 + Math.random() * 0.5;
-    let prev = 0;
-    for (let k = 0; k < len && i + k < N; k++) {
-      const w = Math.random() * 2 - 1;
-      prev += (w - prev) * 0.42; // high band tick
-      const env = 1 - k / len;
-      d[i + k] += prev * env * env * amp;
-    }
-    i += Math.max(1, Math.floor(period * SR));
-  }
-  // faint continuous mid-noise floor so it doesn't feel empty
-  let lp = 0;
-  for (let j = 0; j < N; j++) {
-    lp += (Math.random() * 2 - 1 - lp) * 0.14;
-    d[j] = Math.tanh((d[j] * 1.4 + lp * 0.5) * 1.3) * 0.46;
-  }
-  b.crossfade(120);
-  return b.uri();
-}
-
-/** 3 — ASPHALT GRIND: low heavy square-ish scrape, no highs at all */
-function skidSquealUri3(): string {
-  const dur = 1.6; // 93.75 Hz = 150 cycles
   const b = new Buf(dur);
   const N = b.data.length;
   let walk = 0;
@@ -417,59 +360,6 @@ function skidSquealUri3(): string {
   b.crossfade(140);
   return b.uri();
 }
-
-/** 4 — RAIL SCRAPE: inharmonic metal partials, each amplitude-walked */
-function skidSquealUri4(): string {
-  const dur = 1.6; // all partials are integer cycles over the loop
-  const b = new Buf(dur);
-  const N = b.data.length;
-  const partials = [620, 986.875, 1302.5, 1975.625];
-  const weights = [0.4, 0.24, 0.16, 0.1];
-  const walks = [0, 0, 0, 0];
-  const TWO_PI = 2 * Math.PI;
-  for (let i = 0; i < N; i++) {
-    const t = i / SR;
-    let s = 0;
-    for (let p = 0; p < partials.length; p++) {
-      walks[p] += (Math.random() * 2 - 1 - walks[p]) * (0.01 + p * 0.006);
-      s += Math.sin(TWO_PI * partials[p] * t) * weights[p] * (0.55 + 0.45 * walks[p]);
-    }
-    b.data[i] = Math.tanh(s * 2.4) * 0.46;
-  }
-  b.crossfade(160);
-  return b.uri();
-}
-
-/** 5 — WET HISS: airy hydroplane wash — pure noise band, breathing */
-function skidSquealUri5(): string {
-  const dur = 1.6;
-  const b = new Buf(dur);
-  const N = b.data.length;
-  let hi = 0;
-  let lo = 0;
-  let walk = 0;
-  let whoosh = 0;
-  for (let i = 0; i < N; i++) {
-    const w = Math.random() * 2 - 1;
-    hi += (w - hi) * 0.45;
-    lo += (w - lo) * 0.1;
-    walk += (Math.random() * 2 - 1 - walk) * 0.015;
-    whoosh += (Math.random() * 2 - 1 - whoosh) * 0.07;
-    const band = (hi - lo) * 1.5; // fixed high band, never moves
-    const breath = 0.6 + 0.4 * walk;
-    b.data[i] = Math.tanh((band * breath * 1.7 + whoosh * 1.1) * 1.15) * 0.44;
-  }
-  b.crossfade(180);
-  return b.uri();
-}
-
-export const SQUEAL_LABELS = [
-  "1 · BRAKE SQUEAL",
-  "2 · ABS CHATTER",
-  "3 · ASPHALT GRIND",
-  "4 · RAIL SCRAPE",
-  "5 · WET HISS",
-];
 
 export type SfxName =
   | "click"
@@ -494,8 +384,7 @@ class AudioManager {
   private road?: Howl;
   private skidGroan?: Howl;
   private skidHiss?: Howl;
-  private skidSqueals: Howl[] = [];
-  squealMode = 0;
+  private skidSqueal?: Howl;
   private rain?: Howl;
   private ambience?: Howl;
   private radios: Howl[] = [];
@@ -521,14 +410,8 @@ class AudioManager {
     this.skidGroan.play();
     this.skidHiss = new Howl({ src: [skidHissUri()], loop: true, volume: 0 });
     this.skidHiss.play();
-    this.skidSqueals = [
-      new Howl({ src: [skidSquealUri1()], loop: true, volume: 0 }),
-      new Howl({ src: [skidSquealUri2()], loop: true, volume: 0 }),
-      new Howl({ src: [skidSquealUri3()], loop: true, volume: 0 }),
-      new Howl({ src: [skidSquealUri4()], loop: true, volume: 0 }),
-      new Howl({ src: [skidSquealUri5()], loop: true, volume: 0 }),
-    ];
-    for (const s of this.skidSqueals) s.play();
+    this.skidSqueal = new Howl({ src: [skidSquealUri()], loop: true, volume: 0 });
+    this.skidSqueal.play();
 
     // rain: seamless via circular crossfade — no volume dip at the loop point
     const rn = new Buf(3.4).noise(0, 3.4, 0.4, 0, 0.12).crossfade(160);
@@ -680,7 +563,7 @@ class AudioManager {
 
   /** amount 0..1, speedNorm 0..1 — groan at low speed, hiss at high */
   setSkid(amount: number, speedNorm = 0) {
-    if (!this.ready || !this.skidGroan || !this.skidHiss || this.skidSqueals.length === 0) return;
+    if (!this.ready || !this.skidGroan || !this.skidHiss || !this.skidSqueal) return;
     this.skidAmt += (amount - this.skidAmt) * 0.25;
     const t = Date.now() / 1000;
     const jG = 0.88 + 0.12 * Math.sin(t * 19.7);
@@ -688,23 +571,10 @@ class AudioManager {
     const jS = 0.82 + 0.18 * Math.sin(t * 34.1 + 4);
     this.skidGroan.rate(0.85 + speedNorm * 0.5);
     this.skidHiss.rate(0.9 + speedNorm * 0.7);
+    this.skidSqueal.rate(0.85 + speedNorm * 0.35);
     this.skidGroan.volume(Math.min(0.42, this.skidAmt * (0.55 - 0.22 * speedNorm) * jG));
     this.skidHiss.volume(Math.min(0.4, this.skidAmt * (0.18 + 0.34 * speedNorm) * jH));
-    // only the selected squeal flavor is audible
-    for (let i = 0; i < this.skidSqueals.length; i++) {
-      if (i === this.squealMode) {
-        this.skidSqueals[i].rate(0.85 + speedNorm * 0.35);
-        this.skidSqueals[i].volume(Math.min(0.26, this.skidAmt * (0.3 + 0.36 * speedNorm) * jS));
-      } else {
-        this.skidSqueals[i].volume(0);
-      }
-    }
-  }
-
-  /** debug: cycle through the five turning-sound flavors — returns the label */
-  cycleSqueal(): string {
-    this.squealMode = (this.squealMode + 1) % SQUEAL_LABELS.length;
-    return SQUEAL_LABELS[this.squealMode];
+    this.skidSqueal.volume(Math.min(0.26, this.skidAmt * (0.3 + 0.36 * speedNorm) * jS));
   }
 
   setRain(on: boolean) {

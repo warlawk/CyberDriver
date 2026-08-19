@@ -8,7 +8,7 @@ import { Effects } from "./effects";
 import { DeliverySystem } from "./delivery";
 import { HUD } from "./hud";
 import { AssetManager } from "./assets";
-import { audio, RADIO_STATIONS, SQUEAL_LABELS } from "./audio";
+import { audio, RADIO_STATIONS } from "./audio";
 import { ObjectiveMarker } from "./marker";
 import { setAtmosphere } from "./particles";
 import type { GamePhase, HudSnapshot, RunStats } from "./utils";
@@ -259,13 +259,6 @@ export class Game {
       this.radioName = audio.toggleRadio();
       this.hud.notify(this.radioName ? "TUNED TO " + this.radioName : "RADIO OFF", 0xff2e7e);
     }
-    if (e.code === "KeyG") {
-      // debug: audition the tire-squeal flavors while you pick one
-      audio.unlock();
-      const label = audio.cycleSqueal();
-      audio.play("click");
-      this.hud.notify("TIRE SQUEAL · " + label, 0x38ff9e);
-    }
     if ((e.code === "KeyP" || e.code === "Escape") && (this.phase === "playing" || this.phase === "paused")) {
       if (this.phase === "playing") this.pause();
       else this.resume();
@@ -347,7 +340,6 @@ export class Game {
         `GLTF      ${this.assets.loadedGltf} loaded`,
         `DRAWCALLS ${this.world.renderer.info.render.calls}`,
         `INTEGRITY ${Math.max(0, Math.round((this.integrity / this.maxIntegrity) * 100))}%`,
-        `SQUEAL    ${SQUEAL_LABELS[audio.squealMode]}  [G]`,
       ]);
     }
   };
