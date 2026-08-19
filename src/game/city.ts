@@ -660,10 +660,11 @@ export function generateCity(seed: number): CityData {
     }
   }
 
-  /* --- perimeter guard rails with neon strip --- */
+  /* --- perimeter guard rails with neon strip (solid — crashing works) --- */
   const railMat = new THREE.MeshLambertMaterial({ color: 0x16233d });
   const stripMat = new THREE.MeshBasicMaterial({ color: 0x1a8fa8 });
   const R = HALF_ROAD + 3.4;
+  const RAIL_T = 1.0; // collider half-thickness — thick enough to never tunnel
   for (const s of [-1, 1]) {
     for (const axisH of [true, false]) {
       const rail = new THREE.Mesh(new THREE.BoxGeometry(axisH ? R * 2 + 10 : 0.7, 1.3, axisH ? 0.7 : R * 2 + 10), railMat);
@@ -672,6 +673,24 @@ export function generateCity(seed: number): CityData {
       const strip = new THREE.Mesh(new THREE.BoxGeometry(axisH ? R * 2 + 10 : 0.2, 0.18, axisH ? 0.2 : R * 2 + 10), stripMat);
       strip.position.set(axisH ? 0 : s * R, 1.35, axisH ? s * R : 0);
       group.add(strip);
+      // solid wall collider on every side of the map
+      if (axisH) {
+        colliders.push({
+          kind: "box",
+          minX: -(R + 6),
+          maxX: R + 6,
+          minZ: s * R - RAIL_T,
+          maxZ: s * R + RAIL_T,
+        });
+      } else {
+        colliders.push({
+          kind: "box",
+          minX: s * R - RAIL_T,
+          maxX: s * R + RAIL_T,
+          minZ: -(R + 6),
+          maxZ: R + 6,
+        });
+      }
     }
   }
 

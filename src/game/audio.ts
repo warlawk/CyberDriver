@@ -339,43 +339,91 @@ function skidHissUri(): string {
 }
 
 /* ------------------------------------------------------------------
-   Tyre squeal: detuned saw pair in a low-mid register, pitch-smeared
-   by filtered noise and hard-driven. Modulation is continuous and
-   slow (no rectified gating) so it sustains a harsh grind instead of
-   fluttering like a bird.
+   Tyre squeal — three debug-switchable flavors (cycle with G).
+   All are continuous (no rectified gating), only slowly modulated.
 ------------------------------------------------------------------- */
-function skidSquealUri(): string {
-  const dur = 1.6;
+
+/** A — LOW GRIND: dark detuned saws ~240/355 Hz, heavy LP + hard drive */
+function skidSquealUriA(): string {
+  const dur = 1.4;
   const b = new Buf(dur);
   const N = b.data.length;
   let ph1 = 0;
   let ph2 = 0;
-  let nzF = 0; // slow-filtered noise -> frequency smear
-  let nzA = 0; // second, even slower noise -> amplitude swell
-  let lpS = 0; // one-pole top-tamer
+  let nzF = 0;
+  let lpS = 0;
   const TWO_PI = 2 * Math.PI;
   for (let i = 0; i < N; i++) {
     const t = i / SR;
-    nzF += (Math.random() * 2 - 1 - nzF) * 0.012;
-    nzA += (Math.random() * 2 - 1 - nzA) * 0.004;
-    const smear = nzF * 90;
-    const wobble = Math.sin(TWO_PI * 4.6 * t) * 26 + Math.sin(TWO_PI * 8.9 * t + 1) * 14;
-    const f1 = 620 + wobble + smear;
-    const f2 = 875 - wobble * 0.7 + smear * 1.3;
+    nzF += (Math.random() * 2 - 1 - nzF) * 0.01;
+    const smear = nzF * 55;
+    const wobble = Math.sin(TWO_PI * 3.7 * t) * 18 + Math.sin(TWO_PI * 7.3 * t + 1) * 9;
+    const f1 = 240 + wobble + smear;
+    const f2 = 357 - wobble * 0.6 + smear * 1.2;
     ph1 += (TWO_PI * f1) / SR;
     ph2 += (TWO_PI * f2) / SR;
     const saw1 = (ph1 % TWO_PI) / Math.PI - 1;
     const saw2 = (ph2 % TWO_PI) / Math.PI - 1;
-    lpS += (saw1 * 0.6 + saw2 * 0.5 - lpS) * 0.3;
-    // continuous modulation only — a slow swell plus gentle filtered-noise
-    // breathing; no hard gating, so no flutter/drumming
-    const swell = 0.72 + 0.28 * Math.sin(TWO_PI * 3.1 * t + 0.4);
-    const breath = 0.82 + 0.18 * nzA;
-    b.data[i] = Math.tanh(lpS * swell * breath * 3.1) * 0.44;
+    lpS += (saw1 * 0.62 + saw2 * 0.5 - lpS) * 0.14; // strong LP: dark body
+    const swell = 0.72 + 0.28 * Math.sin(TWO_PI * 2.3 * t + 0.4);
+    b.data[i] = Math.tanh(lpS * swell * 3.6) * 0.5;
   }
   b.fadeLoop(40);
   return b.uri();
 }
+
+/** B — RUBBER MOAN: sine-led ~430 Hz with a slow smooth glissando */
+function skidSquealUriB(): string {
+  const dur = 1.8;
+  const b = new Buf(dur);
+  const N = b.data.length;
+  let ph1 = 0;
+  let ph2 = 0;
+  const TWO_PI = 2 * Math.PI;
+  for (let i = 0; i < N; i++) {
+    const t = i / SR;
+    // one long lazy pitch bend — the "moan"
+    const glide = 95 * Math.sin(TWO_PI * (1 / 1.8) * t) + 34 * Math.sin(TWO_PI * 1.6 * t + 0.8);
+    const f1 = 430 + glide;
+    const f2 = 646 + glide * 0.8;
+    ph1 += (TWO_PI * f1) / SR;
+    ph2 += (TWO_PI * f2) / SR;
+    const s1 = Math.sin(ph1);
+    const saw2 = ((ph2 % TWO_PI) / Math.PI - 1) * 0.35;
+    const swell = 0.7 + 0.3 * Math.sin(TWO_PI * 2.7 * t + 1.1);
+    b.data[i] = Math.tanh((s1 * 0.75 + saw2) * swell * 2.1) * 0.45;
+  }
+  b.fadeLoop(40);
+  return b.uri();
+}
+
+/** C — GRAVEL SCRATCH: resonant band-pass noise scrape + quiet undertone */
+function skidSquealUriC(): string {
+  const dur = 1.3;
+  const b = new Buf(dur);
+  const N = b.data.length;
+  let lpA = 0;
+  let lpB = 0;
+  let phU = 0;
+  const TWO_PI = 2 * Math.PI;
+  for (let i = 0; i < N; i++) {
+    const t = i / SR;
+    const w = Math.random() * 2 - 1;
+    // band center wanders slowly between ~700 Hz and ~1500 Hz
+    const aA = 0.34 + 0.22 * Math.sin(TWO_PI * 0.8 * t + 0.5);
+    lpA += (w - lpA) * aA;
+    lpB += (w - lpB) * 0.055;
+    const band = (lpA - lpB) * 1.9;
+    phU += (TWO_PI * (300 + 40 * Math.sin(TWO_PI * 1.1 * t))) / SR;
+    const undertone = Math.sin(phU) * 0.18;
+    const swell = 0.78 + 0.22 * Math.sin(TWO_PI * 5.4 * t);
+    b.data[i] = Math.tanh((band * swell + undertone) * 2.3) * 0.46;
+  }
+  b.fadeLoop(40);
+  return b.uri();
+}
+
+export const SQUEAL_LABELS = ["A · LOW GRIND", "B · RUBBER MOAN", "C · GRAVEL SCRATCH"];
 
 export type SfxName =
   | "click"
@@ -400,7 +448,8 @@ class AudioManager {
   private road?: Howl;
   private skidGroan?: Howl;
   private skidHiss?: Howl;
-  private skidSqueal?: Howl;
+  private skidSqueals: Howl[] = [];
+  squealMode = 0;
   private rain?: Howl;
   private ambience?: Howl;
   private radios: Howl[] = [];
@@ -426,8 +475,12 @@ class AudioManager {
     this.skidGroan.play();
     this.skidHiss = new Howl({ src: [skidHissUri()], loop: true, volume: 0 });
     this.skidHiss.play();
-    this.skidSqueal = new Howl({ src: [skidSquealUri()], loop: true, volume: 0 });
-    this.skidSqueal.play();
+    this.skidSqueals = [
+      new Howl({ src: [skidSquealUriA()], loop: true, volume: 0 }),
+      new Howl({ src: [skidSquealUriB()], loop: true, volume: 0 }),
+      new Howl({ src: [skidSquealUriC()], loop: true, volume: 0 }),
+    ];
+    for (const s of this.skidSqueals) s.play();
 
     // rain: seamless via circular crossfade — no volume dip at the loop point
     const rn = new Buf(3.4).noise(0, 3.4, 0.4, 0, 0.12).crossfade(160);
@@ -579,7 +632,7 @@ class AudioManager {
 
   /** amount 0..1, speedNorm 0..1 — groan at low speed, hiss at high */
   setSkid(amount: number, speedNorm = 0) {
-    if (!this.ready || !this.skidGroan || !this.skidHiss || !this.skidSqueal) return;
+    if (!this.ready || !this.skidGroan || !this.skidHiss || this.skidSqueals.length === 0) return;
     this.skidAmt += (amount - this.skidAmt) * 0.25;
     const t = Date.now() / 1000;
     const jG = 0.88 + 0.12 * Math.sin(t * 19.7);
@@ -587,10 +640,23 @@ class AudioManager {
     const jS = 0.82 + 0.18 * Math.sin(t * 34.1 + 4);
     this.skidGroan.rate(0.85 + speedNorm * 0.5);
     this.skidHiss.rate(0.9 + speedNorm * 0.7);
-    this.skidSqueal.rate(0.85 + speedNorm * 0.35);
     this.skidGroan.volume(Math.min(0.42, this.skidAmt * (0.55 - 0.22 * speedNorm) * jG));
     this.skidHiss.volume(Math.min(0.4, this.skidAmt * (0.18 + 0.34 * speedNorm) * jH));
-    this.skidSqueal.volume(Math.min(0.24, this.skidAmt * (0.26 + 0.34 * speedNorm) * jS));
+    // only the selected squeal flavor is audible
+    for (let i = 0; i < this.skidSqueals.length; i++) {
+      if (i === this.squealMode) {
+        this.skidSqueals[i].rate(0.85 + speedNorm * 0.35);
+        this.skidSqueals[i].volume(Math.min(0.26, this.skidAmt * (0.3 + 0.36 * speedNorm) * jS));
+      } else {
+        this.skidSqueals[i].volume(0);
+      }
+    }
+  }
+
+  /** debug: cycle through the three squeal flavors — returns the label */
+  cycleSqueal(): string {
+    this.squealMode = (this.squealMode + 1) % SQUEAL_LABELS.length;
+    return SQUEAL_LABELS[this.squealMode];
   }
 
   setRain(on: boolean) {
