@@ -87,6 +87,56 @@ export class DeliverySystem {
     return pts;
   }
 
+  /**
+   * Live GPS replan: snap the van's current position onto the nearest road
+   * line, then follow the (forced single-turn) shortest grid route to the
+   * active target. Called repeatedly while driving so the minimap route
+   * always starts at the vehicle and re-routes after wrong turns.
+   */
+  replanRoute(px: number, pz: number) {
+    const m = this.mission;
+    if (!m) return;
+    const B = this.city.blocks;
+    const lines = this.city.lines;
+    let iH = 0;
+    let dH = Infinity;
+    let iV = 0;
+    let dV = Infinity;
+    for (let i = 0; i <= B; i++) {
+      const dh = Math.abs(pz - lines[i]);
+      const dv = Math.abs(px - lines[i]);
+      if (dh < dH) {
+        dH = dh;
+        iH = i;
+      }
+      if (dv < dV) {
+        dV = dv;
+        iV = i;
+      }
+    }
+    const horiz = dH <= dV;
+    const t = m.target;
+    const raw: { x: number; z: number }[] = [{ x: px, z: pz }];
+    if (horiz) {
+      raw.push({ x: px, z: lines[iH] }); // project onto current road
+      raw.push({ x: lines[t.gx], z: lines[iH] }); // turn at target's column
+    } else {
+      raw.push({ x: lines[iV], z: pz });
+      raw.push({ x: lines[iV], z: lines[t.gz] });
+    }
+    raw.push({ x: t.x, z: t.z });
+    // collapse near-duplicate waypoints, always keeping the tail at target
+    const pts = [raw[0]];
+    for (let i = 1; i < raw.length; i++) {
+      const p = raw[i];
+      const prev = pts[pts.length - 1];
+      if (i === raw.length - 1 || Math.hypot(p.x - prev.x, p.z - prev.z) > 1.5) {
+        pts.push(p);
+      }
+    }
+    m.route = pts;
+  }
+
   newMission(px: number, pz: number) {
     this.counter++;
     const rng = mulberry32((this.city.seed ^ (this.counter * 2654435761)) >>> 0);

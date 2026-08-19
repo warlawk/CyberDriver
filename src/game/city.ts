@@ -15,6 +15,7 @@ import {
   rooftopCanvas,
   concreteCanvas,
   paintAsphalt,
+  barrierStripeCanvas,
   toTex,
 } from "./textures";
 
@@ -536,36 +537,88 @@ export function generateCity(seed: number): CityData {
   }
   group.add(parked);
 
-  /* --- construction barriers --- */
-  const stripeTexT = tex(stripeCanvas(), 3, 1);
-  for (let i = 0; i < 3; i++) {
+  /* --- construction barriers (proper barricades: feet, striped boards, lamp, cones) --- */
+  const boardTex = toTex(barrierStripeCanvas(), { repeatX: 2 });
+  const boardMat = new THREE.MeshLambertMaterial({
+    map: boardTex,
+    emissiveMap: boardTex,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.22,
+    color: 0xf8efe2,
+  });
+  const orangeMat = new THREE.MeshLambertMaterial({ color: 0xff7a1a });
+  const darkMetalMat = new THREE.MeshLambertMaterial({ color: 0x2c3550 });
+  const coneMat = new THREE.MeshLambertMaterial({ color: 0xff6a10, emissive: 0xff6a10, emissiveIntensity: 0.12 });
+  const coneBandMat = new THREE.MeshLambertMaterial({ color: 0xf2f4fb });
+  const boardGeo = new THREE.BoxGeometry(6.4, 0.55, 0.14);
+  const bPostGeo = new THREE.BoxGeometry(0.16, 1.05, 0.16);
+  const bFootGeo = new THREE.BoxGeometry(0.5, 0.12, 1.1);
+  const lampPostGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
+  const bLampGeo = new THREE.SphereGeometry(0.22, 8, 8);
+  const coneGeo = new THREE.ConeGeometry(0.34, 0.85, 10);
+  const coneBandGeo = new THREE.CylinderGeometry(0.21, 0.25, 0.14, 10);
+  const nearRoadLine = (v: number) => lines.some((l) => Math.abs(v - l) < 12);
+  let placedBarriers = 0;
+  let barrierGuard = 0;
+  while (placedBarriers < 4 && barrierGuard++ < 80) {
     const axisH = chance(rng, 0.5);
     const line = lines[randInt(rng, 1, BLOCKS - 1)];
     const along = rand(rng, -HALF_ROAD * 0.6, HALF_ROAD * 0.6);
+    if (nearRoadLine(along)) continue; // keep intersections clear
     const side = chance(rng, 0.5) ? 1 : -1;
     const bx = axisH ? along : line + side * (ROAD_W / 2 - 2.4);
     const bz = axisH ? line + side * (ROAD_W / 2 - 2.4) : along;
-    const bar = new THREE.Mesh(
-      new THREE.BoxGeometry(axisH ? 7 : 0.9, 1.15, axisH ? 0.9 : 7),
-      new THREE.MeshLambertMaterial({ map: stripeTexT, emissiveMap: stripeTexT, emissive: 0xffffff, emissiveIntensity: 0.35 })
-    );
-    bar.position.set(bx, 0.62, bz);
+    placedBarriers++;
+
+    const bar = new THREE.Group();
+    for (const sx of [-2.7, 2.7]) {
+      const foot = new THREE.Mesh(bFootGeo, darkMetalMat);
+      foot.position.set(sx, 0.06, 0);
+      const post = new THREE.Mesh(bPostGeo, orangeMat);
+      post.position.set(sx, 0.6, 0);
+      bar.add(foot, post);
+    }
+    const upper = new THREE.Mesh(boardGeo, boardMat);
+    upper.position.set(0, 1.02, 0);
+    const lower = new THREE.Mesh(boardGeo, boardMat);
+    lower.position.set(0, 0.42, 0);
+    const lampPost = new THREE.Mesh(lampPostGeo, darkMetalMat);
+    lampPost.position.set(2.7, 1.35, 0);
+    const lampMat = new THREE.MeshBasicMaterial({ color: 0xffa028 });
+    const lampB = new THREE.Mesh(bLampGeo, lampMat);
+    lampB.position.set(2.7, 1.72, 0);
+    bar.add(upper, lower, lampPost, lampB);
+    bar.position.set(bx, 0, bz);
+    bar.rotation.y = axisH ? 0 : Math.PI / 2;
     group.add(bar);
+
     colliders.push({
       kind: "box",
-      minX: bx - (axisH ? 3.5 : 0.5),
-      maxX: bx + (axisH ? 3.5 : 0.5),
-      minZ: bz - (axisH ? 0.5 : 3.5),
-      maxZ: bz + (axisH ? 0.5 : 3.5),
+      minX: bx - (axisH ? 3.3 : 0.55),
+      maxX: bx + (axisH ? 3.3 : 0.55),
+      minZ: bz - (axisH ? 0.55 : 3.3),
+      maxZ: bz + (axisH ? 0.55 : 3.3),
     });
-    const lampMat = new THREE.MeshBasicMaterial({ color: 0xffa028 });
-    const lampB = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), lampMat);
-    lampB.position.set(bx, 1.42, bz);
-    group.add(lampB);
+
     const ph = rng() * 8;
     animators.push((t) => {
       lampMat.color.setHex(Math.sin(t * 5 + ph) > 0 ? 0xffa028 : 0x331a04);
     });
+
+    // a traffic cone kicked out toward the live lane
+    if (chance(rng, 0.8)) {
+      const endOff = rand(rng, 3.7, 4.7) * (chance(rng, 0.5) ? 1 : -1);
+      const latOff = side * (ROAD_W / 2 - 1.15);
+      const cone = new THREE.Group();
+      const body = new THREE.Mesh(coneGeo, coneMat);
+      body.position.y = 0.42;
+      const band = new THREE.Mesh(coneBandGeo, coneBandMat);
+      band.position.y = 0.48;
+      cone.add(body, band);
+      cone.position.set(axisH ? along + endOff : bx + (latOff - side * (ROAD_W / 2 - 2.4)), 0.02, axisH ? bz + (latOff - side * (ROAD_W / 2 - 2.4)) : along + endOff);
+      cone.rotation.y = rng() * Math.PI;
+      group.add(cone);
+    }
   }
 
   /* --- perimeter guard rails with neon strip --- */

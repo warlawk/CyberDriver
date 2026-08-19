@@ -77,6 +77,7 @@ export class Game {
   private smokeTimer = 0;
   private crashCool = 0;
   private hornCool = 0;
+  private routeTimer = 0;
   private lastCountLabel = "";
   private hasPackage = false;
 
@@ -443,6 +444,13 @@ export class Game {
     }
     this.delivery.update(dt, this.t);
 
+    // live GPS: re-route from the van's current position ~3x per second
+    this.routeTimer -= dt;
+    if (this.routeTimer <= 0) {
+      this.routeTimer = 0.35;
+      this.delivery.replanRoute(pos.x, pos.z);
+    }
+
     // drift smoke + skid audio
     if (frame.drifting) {
       const f = new THREE.Vector3(Math.sin(this.player.heading), 0, Math.cos(this.player.heading));
@@ -478,6 +486,8 @@ export class Game {
     s.traffic = this.traffic.dots();
     s.radio = this.radioName;
     s.hasPackage = this.hasPackage;
+    const mm = this.delivery.mission;
+    s.distance = mm ? Math.hypot(mm.target.x - this.player.pos.x, mm.target.z - this.player.pos.z) : 0;
     this.delivery.snapshotInto(s);
   }
 

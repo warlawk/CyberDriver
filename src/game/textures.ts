@@ -476,3 +476,30 @@ export function vanRoofCanvas(rng: () => number): HTMLCanvasElement {
   g.fillRect(S / 2 - 12, S / 2 + 6, 24, 3);
   return c;
 }
+
+/** orange/white diagonal construction-board stripes with wear */
+export function barrierStripeCanvas(): HTMLCanvasElement {
+  const W = 256;
+  const H = 64;
+  const { c, g } = makeCanvas(W, H);
+  g.fillStyle = "#f2f4fb";
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = "#ff7a1a";
+  for (let i = -2; i < 8; i++) {
+    g.beginPath();
+    g.moveTo(i * 40, H);
+    g.lineTo(i * 40 + 30, 0);
+    g.lineTo(i * 40 + 60, 0);
+    g.lineTo(i * 40 + 30, H);
+    g.closePath();
+    g.fill();
+  }
+  for (let i = 0; i < 90; i++) {
+    g.fillStyle = `rgba(10,10,14,${(Math.random() * 0.16).toFixed(3)})`;
+    g.fillRect(Math.random() * W, Math.random() * H, 2 + Math.random() * 5, 1 + Math.random() * 3);
+  }
+  g.fillStyle = "rgba(20,22,30,0.5)";
+  g.fillRect(0, 0, W, 3);
+  g.fillRect(0, H - 3, W, 3);
+  return c;
+}
