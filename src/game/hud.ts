@@ -44,12 +44,15 @@ export class HUD {
   private timeTxt: Text;
   private timePanel = new Container();
 
-  // minimap
+  // minimap (rotating GPS style: player pinned center, forward = up)
   private mapSize = 214;
   private mapX = 0;
   private mapY = 18;
   private mapStatic = new Graphics();
   private mapDyn = new Graphics();
+  private mapWorld = new Container(); // rotates with the player
+  private mapClip = new Graphics(); // circular window
+  private mapRim = new Graphics(); // fixed bezel, ticks, vignette
   private mapContainer = new Container();
   private extent = 210;
 
@@ -107,6 +110,9 @@ export class HUD {
       text: "SPACE DRIFT · H HORN · R RADIO · F DEBUG · P PAUSE",
       style: { fontFamily: BODY, fontSize: 14, fontWeight: "600", fill: 0x6f86b8, letterSpacing: 3 },
     });
+
+    // rotating world content lives inside the masked, player-centered container
+    this.mapWorld.addChild(this.mapStatic, this.mapDyn);
   }
 
   async init(container: HTMLElement) {
@@ -170,14 +176,44 @@ export class HUD {
     this.timePanel.addChild(tg, tlabel, this.timeTxt);
     this.timePanel.position.set(this.w / 2 - 105, 18);
 
-    // minimap
+    // minimap — circular rotating GPS
     this.mapX = this.w - this.mapSize - 18;
     this.mapContainer.removeChildren();
     const frame = new Graphics();
     panel(frame, 0, 0, this.mapSize, this.mapSize + 26);
-    const mlabel = new Text({ text: "SECTOR 7 GRID", style: { fontFamily: BODY, fontSize: 13, fontWeight: "700", fill: 0x7f95c8, letterSpacing: 3 } });
+    const mlabel = new Text({ text: "GPS · ROTATING", style: { fontFamily: BODY, fontSize: 13, fontWeight: "700", fill: 0x7f95c8, letterSpacing: 3 } });
     mlabel.position.set(14, this.mapSize + 4);
-    this.mapContainer.addChild(frame, this.mapStatic, this.mapDyn, mlabel);
+
+    const mcx = this.mapSize / 2;
+    const mcy = this.mapSize / 2;
+    const R = this.mapSize / 2 - 10;
+
+    // circular window for the rotating world content
+    this.mapClip.clear();
+    this.mapClip.circle(mcx, mcy, R).fill({ color: 0xffffff, alpha: 0.001 });
+    this.mapWorld.mask = this.mapClip;
+
+    // fixed bezel: soft vignette so the rotating edge never looks raw
+    const rim = this.mapRim;
+    rim.clear();
+    for (let i = 0; i < 7; i++) {
+      rim.circle(mcx, mcy, R - 2 - i * 4).stroke({ color: 0x04060f, alpha: 0.05 + i * 0.06, width: 8 });
+    }
+    // compass ticks (fixed to the screen — north is always up)
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      const big = k % 3 === 0;
+      const r1 = R - (big ? 11 : 6);
+      rim.moveTo(mcx + Math.cos(a) * r1, mcy + Math.sin(a) * r1)
+        .lineTo(mcx + Math.cos(a) * (R - 2), mcy + Math.sin(a) * (R - 2))
+        .stroke({ color: 0x9fb8e8, alpha: big ? 0.75 : 0.35, width: big ? 2 : 1.2 });
+    }
+    rim.circle(mcx, mcy, R).stroke({ color: CYAN, alpha: 0.6, width: 2 });
+    rim.circle(mcx, mcy, R + 4).stroke({ color: 0x182647, width: 2 });
+    // fixed "you are heading this way" marker at 12 o'clock
+    rim.poly([mcx, mcy - R + 3, mcx - 6, mcy - R + 13, mcx + 6, mcy - R + 13]).fill({ color: CYAN, alpha: 0.9 });
+
+    this.mapContainer.addChild(frame, this.mapClip, this.mapWorld, rim, mlabel);
     this.mapContainer.position.set(this.mapX, this.mapY);
     this.redrawMap();
 
@@ -278,13 +314,15 @@ export class HUD {
         g.rect(x, y, halfBlock * 2 * scale, halfBlock * 2 * scale).fill({ color: 0x111a33, alpha: 0.75 });
       }
     }
+    // content now pans/rotates with the player at center, so every road is
+    // drawn across the whole city (the circular window decides what's seen)
     const rw = Math.max(2.5, mi.roadW * scale);
+    const edgeA = this.mapPx(mi.lines[0] - 20);
+    const edgeB = this.mapPx(mi.lines[mi.lines.length - 1] + 20);
     for (const l of mi.lines) {
       const m = this.mapPx(l);
-      const a = this.mapPx(-this.extent);
-      const b = this.mapPx(this.extent);
-      g.moveTo(a, m).lineTo(b, m).stroke({ color: 0x2a3c6e, width: rw });
-      g.moveTo(m, a).lineTo(m, b).stroke({ color: 0x2a3c6e, width: rw });
+      g.moveTo(edgeA, m).lineTo(edgeB, m).stroke({ color: 0x2a3c6e, width: rw });
+      g.moveTo(m, edgeA).lineTo(m, edgeB).stroke({ color: 0x2a3c6e, width: rw });
     }
   }
 
@@ -406,7 +444,12 @@ export class HUD {
       }
     }
 
-    // minimap dynamic
+    // minimap: pin the player to the circle center, rotate the world so the
+    // van's forward direction always points up (GPS style)
+    this.mapWorld.pivot.set(this.mapPx(s.px), this.mapPx(s.pz));
+    this.mapWorld.position.set(this.mapSize / 2, this.mapSize / 2);
+    this.mapWorld.rotation = s.heading + Math.PI;
+
     const md = this.mapDyn;
     md.clear();
     if (s.route.length > 1) {
@@ -424,17 +467,12 @@ export class HUD {
       md.circle(tx, tz, pr).stroke({ color: isPickup ? CYAN : GREEN, width: 2.4 });
       md.circle(tx, tz, 2.6).fill({ color: isPickup ? CYAN : GREEN });
     }
+    // player marker: the container rotation already aims it up-screen,
+    // so the dart is drawn pointing straight up in local space
     const px = this.mapPx(s.px);
     const pz = this.mapPx(s.pz);
-    const rot = -s.heading;
-    const cs = Math.cos(rot);
-    const sn = Math.sin(rot);
-    const pts = [0, 7, 5, -6, 0, -3, -5, -6];
-    const world: number[] = [];
-    for (let i = 0; i < pts.length; i += 2) {
-      world.push(px + pts[i] * cs - pts[i + 1] * sn, pz + pts[i] * sn + pts[i + 1] * cs);
-    }
-    md.poly(world).fill({ color: 0xeafcff });
+    md.circle(px, pz, 9).stroke({ color: CYAN, alpha: 0.5, width: 1.4 });
+    md.poly([px, pz - 9, px + 5.6, pz + 7, px, pz + 3, px - 5.6, pz + 7]).fill({ color: 0xeafcff });
 
     // speedo
     const kmh = clamp(s.speedKmh, 0, 180);

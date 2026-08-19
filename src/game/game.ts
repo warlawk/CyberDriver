@@ -132,7 +132,8 @@ export class Game {
     this.effects = new Effects(this.world.scene);
     this.delivery = new DeliverySystem(this.world.scene, this.city);
     this.hud.drawRoads(this.city.blocks, this.city.pitch, this.city.lines, this.city.roadW);
-    this.hud.setExtent(this.city.half + 6);
+    // rotating GPS map: show a ~140 m window around the van
+    this.hud.setExtent(70);
     const spawn = this.city.lines[3];
     this.player.reset(spawn, spawn, Math.PI / 2);
     this.snap.route = [];
