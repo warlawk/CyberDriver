@@ -10,6 +10,13 @@ import {
   type Collider,
   type IntersectionNode,
 } from "./utils";
+import {
+  buildingFacade,
+  rooftopCanvas,
+  concreteCanvas,
+  paintAsphalt,
+  toTex,
+} from "./textures";
 
 /* ---------------- city constants ---------------- */
 export const BLOCKS = 7;
@@ -38,12 +45,7 @@ function tex(c: HTMLCanvasElement, repeatX = 1, repeatY = 1) {
 }
 
 function asphaltBase(g: CanvasRenderingContext2D, w: number, h: number) {
-  g.fillStyle = "#0b0e1b";
-  g.fillRect(0, 0, w, h);
-  for (let i = 0; i < 420; i++) {
-    g.fillStyle = `rgba(${Math.random() > 0.5 ? "255,255,255" : "0,0,0"},${(Math.random() * 0.05).toFixed(3)})`;
-    g.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 3, 2 + Math.random() * 3);
-  }
+  paintAsphalt(g, w, h, Math.random);
 }
 
 function laneCanvas(vertical: boolean) {
@@ -79,31 +81,6 @@ function crossCanvas() {
     g.fillRect(o, 212, 20, 40); // bottom
     g.fillRect(4, o, 40, 20); // left
     g.fillRect(212, o, 40, 20); // right
-  }
-  return c;
-}
-
-function facadeCanvas(rng: () => number) {
-  const { c, g } = cnv(128, 256);
-  g.fillStyle = "#0a0e1e";
-  g.fillRect(0, 0, 128, 256);
-  const cols = 6;
-  const rows = 14;
-  const cw = 128 / cols;
-  const ch = 256 / rows;
-  const litColors = ["#ffe1a0", "#a0ecff", "#ffb0d0", "#c8ffe0", "#ffe14d"];
-  for (let x = 0; x < cols; x++) {
-    for (let y = 0; y < rows; y++) {
-      if (rng() < 0.3) {
-        g.fillStyle = litColors[Math.floor(rng() * litColors.length)];
-        g.globalAlpha = 0.35 + rng() * 0.65;
-        g.fillRect(x * cw + 3, y * ch + 3, cw - 6, ch - 6);
-        g.globalAlpha = 1;
-      } else {
-        g.fillStyle = "#101830";
-        g.fillRect(x * cw + 3, y * ch + 3, cw - 6, ch - 6);
-      }
-    }
   }
   return c;
 }
@@ -212,9 +189,10 @@ export function generateCity(seed: number): CityData {
       nodes.push({ gx, gz, x: lines[gx], z: lines[gz] });
 
   /* --- ground --- */
+  const concreteT = toTex(concreteCanvas(rng), { repeatX: 90, repeatY: 90 });
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(1600, 1600),
-    new THREE.MeshLambertMaterial({ color: 0x05070f })
+    new THREE.MeshLambertMaterial({ map: concreteT, color: 0x4a5474 })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.05;
@@ -248,29 +226,41 @@ export function generateCity(seed: number): CityData {
     group.add(m);
   }
 
-  /* --- shared facade textures --- */
-  const facadeMats = Array.from({ length: 6 }, () => {
-    const t = tex(facadeCanvas(rng));
-    return new THREE.MeshLambertMaterial({
-      map: t,
-      emissiveMap: t,
+  /* --- shared facade textures (sides painted, rooftops separate) --- */
+  const roofMat = new THREE.MeshLambertMaterial({
+    map: toTex(rooftopCanvas(rng)),
+    color: 0x9aa8cc,
+  });
+  const towerBottomMat = new THREE.MeshLambertMaterial({ color: 0x0c1120 });
+  const facadeMats = Array.from({ length: 8 }, () => {
+    const f = buildingFacade(rng);
+    const side = new THREE.MeshLambertMaterial({
+      map: f.map,
+      emissiveMap: f.emissiveMap,
       emissive: 0xffffff,
-      emissiveIntensity: 0.62,
-      color: 0x8f9bc0,
+      emissiveIntensity: 0.9,
+      color: 0xcdd8f2,
     });
+    // BoxGeometry face order: +x, -x, +y(top), -y(bottom), +z, -z
+    return [side, side, roofMat, towerBottomMat, side, side];
   });
   const signTextures = Array.from({ length: 10 }, () => tex(signCanvas(rng)));
   const billTextures = Array.from({ length: 4 }, () => tex(billboardCanvas(rng)));
   const dummy = new THREE.Object3D();
 
   /* --- blocks: sidewalks + buildings + plazas --- */
-  const sidewalkMat = new THREE.MeshLambertMaterial({ color: 0x131a30 });
+  const sidewalkTop = new THREE.MeshLambertMaterial({
+    map: toTex(concreteCanvas(rng), { repeatX: 5, repeatY: 5 }),
+    color: 0xb8c4e4,
+  });
+  const curbMat = new THREE.MeshLambertMaterial({ color: 0x232c48 });
+  const sidewalkMats = [curbMat, curbMat, sidewalkTop, curbMat, curbMat, curbMat];
   const sidewalkGeo = new THREE.BoxGeometry(BLOCK, 0.3, BLOCK);
   for (let bx = 0; bx < BLOCKS; bx++) {
     for (let bz = 0; bz < BLOCKS; bz++) {
       const cx = (bx - (BLOCKS - 1) / 2) * PITCH;
       const cz = (bz - (BLOCKS - 1) / 2) * PITCH;
-      const sw = new THREE.Mesh(sidewalkGeo, sidewalkMat);
+      const sw = new THREE.Mesh(sidewalkGeo, sidewalkMats);
       sw.position.set(cx, 0.15, cz);
       group.add(sw);
 

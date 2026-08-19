@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { axisGo, ROAD_W } from "./city";
 import type { CityData, TrafficDot } from "./utils";
 import { chance, clamp, mulberry32, pick, rand } from "./utils";
+import { carPaintCanvas, toTex, disposeDeep } from "./textures";
 
 interface Car {
   group: THREE.Group;
@@ -31,7 +32,11 @@ export class TrafficSystem {
   private lightGeo = new THREE.BoxGeometry(0.42, 0.2, 0.1);
   private tailGeo = new THREE.BoxGeometry(0.44, 0.22, 0.1);
   private bodyMats = [0x35507e, 0x6e3560, 0x2e6e68, 0x7a6a2c, 0x27406b, 0x803a3a, 0x4a4a78].map(
-    (c) => new THREE.MeshLambertMaterial({ color: c })
+    (c) =>
+      new THREE.MeshLambertMaterial({
+        map: toTex(carPaintCanvas("#" + c.toString(16).padStart(6, "0"), Math.random)),
+        color: 0xe8ecf8,
+      })
   );
   private glassMat = new THREE.MeshBasicMaterial({ color: 0x9fd8ff });
   private headMat = new THREE.MeshBasicMaterial({ color: 0xe8f6ff });
@@ -251,6 +256,7 @@ export class TrafficSystem {
   }
 
   dispose(scene: THREE.Scene) {
+    disposeDeep(this.group);
     scene.remove(this.group);
     this.cars = [];
   }

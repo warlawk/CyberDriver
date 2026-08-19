@@ -1,5 +1,12 @@
 import * as THREE from "three";
 import { clamp } from "./utils";
+import {
+  vanLiveryCanvas,
+  steelPanelCanvas,
+  vanRoofCanvas,
+  toTex,
+  disposeDeep,
+} from "./textures";
 
 export interface InputState {
   throttle: number; // -1..1
@@ -41,15 +48,33 @@ export class PlayerVehicle {
   private smokeAnchor = new THREE.Vector3();
 
   constructor(scene: THREE.Scene) {
-    const body = new THREE.MeshLambertMaterial({ color: 0x31456e });
-    const cargo = new THREE.MeshLambertMaterial({ color: 0x3d5488 });
     const dark = new THREE.MeshLambertMaterial({ color: 0x141b30 });
+    const steel = new THREE.MeshLambertMaterial({
+      map: toTex(steelPanelCanvas(Math.random)),
+      color: 0xdfe8ff,
+    });
+    const livery = new THREE.MeshLambertMaterial({
+      map: toTex(vanLiveryCanvas()),
+      color: 0xe8f0ff,
+    });
+    const roof = new THREE.MeshLambertMaterial({
+      map: toTex(vanRoofCanvas(Math.random)),
+      color: 0xdfe8ff,
+    });
 
-    const cargoBox = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.0, 3.0), cargo);
+    // faces: +x, -x, +y(top), -y(bottom), +z(front), -z(rear)
+    const cargoBox = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.0, 3.0), [
+      livery,
+      livery,
+      roof,
+      dark,
+      steel,
+      steel,
+    ]);
     cargoBox.position.set(0, 1.5, -0.45);
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.4, 1.8), body);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.4, 1.8), steel);
     cabin.position.set(0, 1.2, 1.55);
-    const hood = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 0.7), body);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 0.7), steel);
     hood.position.set(0, 0.85, 2.6);
     const windshield = new THREE.Mesh(
       new THREE.BoxGeometry(2.05, 0.62, 0.12),
@@ -231,6 +256,7 @@ export class PlayerVehicle {
   }
 
   dispose(scene: THREE.Scene) {
+    disposeDeep(this.group);
     scene.remove(this.group);
   }
 }
