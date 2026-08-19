@@ -234,7 +234,7 @@ export class TrafficSystem {
   circles(): { x: number; z: number; r: number; car: Car }[] {
     return this.cars.map((c) => {
       const p = this.worldPos(c);
-      return { x: p.x, z: p.z, r: 2.1, car: c };
+      return { x: p.x, z: p.z, r: 1.5, car: c };
     });
   }
 

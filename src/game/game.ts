@@ -59,7 +59,8 @@ export class Game {
   private streak = 1;
   private bestStreak = 0;
   private deliveries = 0;
-  private integrity = 100;
+  private maxIntegrity = 130;
+  private integrity = 130;
   private runTime = 0;
   private countdownT = 0;
   private wreckTimer = -1;
@@ -155,7 +156,7 @@ export class Game {
     this.streak = 1;
     this.bestStreak = 0;
     this.deliveries = 0;
-    this.integrity = 100;
+    this.integrity = this.maxIntegrity;
     this.runTime = 0;
     this.hasPackage = false;
     this.wreckTimer = -1;
@@ -330,7 +331,7 @@ export class Game {
         `CITY SEED ${this.seed}`,
         `GLTF      ${this.assets.loadedGltf} loaded`,
         `DRAWCALLS ${this.world.renderer.info.render.calls}`,
-        `INTEGRITY ${Math.max(0, Math.round(this.integrity))}%`,
+        `INTEGRITY ${Math.max(0, Math.round((this.integrity / this.maxIntegrity) * 100))}%`,
       ]);
     }
   };
@@ -375,7 +376,7 @@ export class Game {
     if (!wrecked) this.handleCollisions(frame.vf);
 
     // damage state
-    if (!wrecked && this.integrity < 35) {
+    if (!wrecked && this.integrity < this.maxIntegrity * 0.35) {
       this.smokeTimer += dt;
       if (this.smokeTimer > 0.13) {
         this.smokeTimer = 0;
@@ -425,7 +426,7 @@ export class Game {
           this.deliveries++;
           this.bestStreak = Math.max(this.bestStreak, this.streak);
           this.streak++;
-          this.integrity = clamp(this.integrity + 14, 0, 100);
+          this.integrity = clamp(this.integrity + 18, 0, this.maxIntegrity);
           this.hasPackage = false;
           this.player.setPackage(false);
           audio.play("deliver");
@@ -434,7 +435,7 @@ export class Game {
           this.hud.flash("deliver");
           this.effects.deliverBurst(pos.x, pos.z);
           this.hud.notify(`+$${reward}  DELIVERED · SEC ${m.code}  ×${mult.toFixed(2)}`, 0xffe14d);
-          this.hud.notify("VAN SERVICED  +14 INTEGRITY", 0x38ff9e);
+          this.hud.notify("VAN SERVICED  +18 INTEGRITY", 0x38ff9e);
           this.rollWeather();
           this.delivery.newMission(pos.x, pos.z);
         }
@@ -470,7 +471,7 @@ export class Game {
     s.money = this.money;
     s.streak = this.streak;
     s.mult = Math.min(3, 1 + 0.25 * (this.streak - 1));
-    s.integrity = clamp(this.integrity, 0, 100);
+    s.integrity = clamp((this.integrity / this.maxIntegrity) * 100, 0, 100);
     s.px = this.player.pos.x;
     s.pz = this.player.pos.z;
     s.heading = this.player.heading;
@@ -488,12 +489,14 @@ export class Game {
     const v = this.player.vel;
     const vn = v.x * nx + v.z * nz;
     if (vn < 0) {
-      v.x -= nx * vn * 1.35;
-      v.z -= nz * vn * 1.35;
+      // restitution ~0: kill inward velocity so the van slides off and can
+      // immediately keep driving instead of bouncing backward
+      v.x -= nx * vn * 1.0;
+      v.z -= nz * vn * 1.0;
     }
-    if (impact > 5 && this.crashCool <= 0) {
-      this.crashCool = 0.28;
-      const dmg = (impact - 5) * (heavy ? 2.6 : 1.9);
+    if (impact > 6 && this.crashCool <= 0) {
+      this.crashCool = 0.24;
+      const dmg = (impact - 6) * (heavy ? 1.6 : 1.15);
       this.integrity -= dmg;
       this.streak = 1;
       this.effects.crashSparks(hx, 1.0, hz, impact > 11);

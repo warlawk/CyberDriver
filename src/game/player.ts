@@ -30,7 +30,7 @@ export class PlayerVehicle {
   pos = new THREE.Vector3(0, 0, 0);
   vel = new THREE.Vector3();
   heading = 0;
-  radius = 1.6;
+  radius = 1.3;
 
   private wheels: THREE.Mesh[] = [];
   private frontPivots: THREE.Object3D[] = [];
@@ -197,7 +197,7 @@ export class PlayerVehicle {
     // steering
     const speedFactor = clamp(Math.abs(vf) / 10, 0, 1) * (1 - 0.22 * (Math.abs(vf) / 46));
     const steerDir = vf < -0.6 ? -1 : 1;
-    this.heading += input.steer * 2.35 * speedFactor * steerDir * (input.handbrake ? 1.3 : 1) * dt;
+    this.heading -= input.steer * 2.35 * speedFactor * steerDir * (input.handbrake ? 1.3 : 1) * dt;
 
     this.vel.copy(f).multiplyScalar(vf).addScaledVector(side, vl);
     this.pos.addScaledVector(this.vel, dt);
@@ -206,7 +206,7 @@ export class PlayerVehicle {
 
     // wheel spin + steer visuals
     for (const w of this.wheels) w.rotation.x += (vf * dt) / 0.46;
-    for (const p of this.frontPivots) p.rotation.y = input.steer * 0.42;
+    for (const p of this.frontPivots) p.rotation.y = -input.steer * 0.42;
 
     const braking = input.throttle < 0 && vf > 1;
     this.tailMat.color.setHex(braking || input.handbrake ? 0xff2233 : 0x991122);
