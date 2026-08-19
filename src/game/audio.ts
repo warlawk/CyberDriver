@@ -217,139 +217,27 @@ function skidHissUri(): string {
 }
 
 /* ------------------------------------------------------------------
-   "Midnight Courier" — a baked 4-bar synthwave bed (Am–F–C–G):
-   kick/snare/hats, driving 8th-note bass, soft pads and a
-   dotted-echo arpeggio. Everything is written with wrap-around so
-   the loop is seamless.
+   High tyre squeal: two detuned wavering sine voices around 2–2.6 kHz
+   with fast pitch jitter, gated by an 18 Hz scrub LFO. Gives the skid
+   its sharp top register instead of just a sweep.
 ------------------------------------------------------------------- */
-function renderMusicUri(): string {
-  const bpm = 100;
-  const beat = 60 / bpm; // 0.6s
-  const beats = 16; // 4 bars
-  const N = Math.round(beat * beats * SR);
-  const d = new Float32Array(N);
-  const add = (i: number, v: number) => {
-    d[((i % N) + N) % N] += v;
-  };
-  const at = (t: number) => Math.round(t * SR);
-
-  const kick = (t0: number) => {
-    const a = at(t0);
-    let ph = 0;
-    for (let i = 0; i < 0.16 * SR; i++) {
-      const f = 135 * Math.exp(-i / (0.028 * SR)) + 41;
-      ph += (2 * Math.PI * f) / SR;
-      add(a + i, Math.sin(ph) * Math.exp(-i / (0.11 * SR)) * 0.85);
-    }
-  };
-  const snare = (t0: number) => {
-    const a = at(t0);
-    let ph = 0;
-    for (let i = 0; i < 0.14 * SR; i++) {
-      ph += (2 * Math.PI * 190) / SR;
-      const body = Math.sin(ph) * Math.exp(-i / (0.05 * SR)) * 0.22;
-      const nz = (Math.random() * 2 - 1) * Math.exp(-i / (0.05 * SR)) * 0.3;
-      add(a + i, body + nz);
-    }
-  };
-  const hat = (t0: number, vol: number) => {
-    const a = at(t0);
-    let prev = 0;
-    for (let i = 0; i < 0.045 * SR; i++) {
-      const w = Math.random() * 2 - 1;
-      prev += (w - prev) * 0.75; // crude high-pass
-      add(a + i, prev * Math.exp(-i / (0.016 * SR)) * vol);
-    }
-  };
-  const bass = (t0: number, midi: number, dur: number) => {
-    const a = at(t0);
-    const f = midiHz(midi);
-    let ph = 0;
-    let lp = 0;
-    const n = Math.min(dur * SR, N);
-    for (let i = 0; i < n; i++) {
-      ph += (2 * Math.PI * f) / SR;
-      const saw = ((ph % (2 * Math.PI)) / Math.PI - 1) * 0.6;
-      lp += (saw - lp) * 0.16;
-      const env = Math.min(1, i / (0.012 * SR)) * (0.75 + 0.25 * Math.exp(-i / (0.18 * SR)));
-      add(a + i, lp * env * 0.5);
-    }
-  };
-  const pad = (t0: number, midis: number[], dur: number) => {
-    for (const m of midis) {
-      const a = at(t0);
-      const n = Math.min(dur * SR, N * 0.98);
-      for (const det of [-6, 0, 6]) {
-        const f = midiHz(m) * Math.pow(2, det / 1200);
-        let ph = Math.random() * 6.28;
-        let lp = 0;
-        for (let i = 0; i < n; i++) {
-          ph += (2 * Math.PI * f) / SR;
-          const saw = ((ph % (2 * Math.PI)) / Math.PI - 1) * 0.5;
-          lp += (saw - lp) * 0.045;
-          const env = Math.min(1, i / (0.5 * SR)) * Math.min(1, (n - i) / (0.35 * SR));
-          add(a + i, lp * env * 0.085);
-        }
-      }
-    }
-  };
-  const arp = (t0: number, midi: number) => {
-    const render = (off: number, vol: number) => {
-      const a = at(t0) + at(off);
-      const f = midiHz(midi);
-      let ph = 0;
-      for (let i = 0; i < 0.16 * SR; i++) {
-        ph += (2 * Math.PI * f) / SR;
-        const tri = (Math.asin(Math.sin(ph)) / (Math.PI / 2)) * 0.6;
-        add(a + i, tri * Math.exp(-i / (0.05 * SR)) * vol);
-      }
-    };
-    render(0, 0.11);
-    render(0.36, 0.05); // dotted-8th echo (wraps via `add`)
-  };
-
-  const bassRoots = [45, 41, 48, 43]; // A F C G
-  const pads = [
-    [57, 60, 64],
-    [53, 57, 60],
-    [55, 60, 64],
-    [55, 59, 62],
-  ];
-  const arpNotes = [
-    [69, 72, 76, 72],
-    [69, 72, 77, 72],
-    [72, 76, 79, 76],
-    [74, 79, 83, 79],
-  ];
-
-  for (let bar = 0; bar < 4; bar++) {
-    const bt = bar * 4 * beat;
-    pad(bt + 0.02, pads[bar], 4 * beat - 0.25);
-    for (let b8 = 0; b8 < 8; b8++) {
-      const root = bassRoots[bar];
-      const oct = b8 % 2 === 1 && b8 !== 7 ? 12 : 0;
-      bass(bt + b8 * (beat / 2), root + oct, beat * 0.46);
-    }
-    for (let q = 0; q < 4; q++) {
-      const t = bt + q * beat;
-      kick(t);
-      if (q === 1 || q === 3) snare(t);
-      hat(t + beat / 2, 0.16);
-      hat(t + beat * 0.25, 0.07);
-      hat(t + beat * 0.75, 0.07);
-      for (let s = 0; s < 4; s++) arp(t + (s * beat) / 4, arpNotes[bar][(q * 4 + s) % 4]);
-    }
+function skidSquealUri(): string {
+  const dur = 1.6;
+  const b = new Buf(dur);
+  const N = b.data.length;
+  let ph1 = 0;
+  let ph2 = 0;
+  for (let i = 0; i < N; i++) {
+    const t = i / SR;
+    const f1 = 2100 + 340 * Math.sin(2 * Math.PI * 6.3 * t) + 170 * Math.sin(2 * Math.PI * 23.7 * t);
+    const f2 = 2580 + 300 * Math.sin(2 * Math.PI * 7.1 * t + 1.3);
+    ph1 += (2 * Math.PI * f1) / SR;
+    ph2 += (2 * Math.PI * f2) / SR;
+    const scrub = 0.55 + 0.45 * Math.sin(2 * Math.PI * 17.3 * t);
+    b.data[i] = (Math.sin(ph1) * 0.6 + Math.sin(ph2) * 0.4) * 0.5 * scrub;
   }
-
-  // soft-clip + tiny loop fade
-  for (let i = 0; i < N; i++) d[i] = Math.tanh(d[i] * 1.15) * 0.82;
-  const fn = Math.floor(0.03 * SR);
-  for (let i = 0; i < fn; i++) {
-    const g = 0.5 - 0.5 * Math.cos((Math.PI * i) / fn);
-    d[i] *= g;
-    d[N - 1 - i] *= g;
-  }
-  return encodeWav(d);
+  b.fadeLoop(40);
+  return b.uri();
 }
 
 export type SfxName =
@@ -375,14 +263,13 @@ class AudioManager {
   private road?: Howl;
   private skidGroan?: Howl;
   private skidHiss?: Howl;
+  private skidSqueal?: Howl;
   private rain?: Howl;
   private ambience?: Howl;
-  private music?: Howl;
   private radios: Howl[] = [];
   ready = false;
   radioOn = false;
   radioIdx = 0;
-  musicOn = true;
   private rainTarget = 0;
   private skidAmt = 0;
 
@@ -402,9 +289,8 @@ class AudioManager {
     this.skidGroan.play();
     this.skidHiss = new Howl({ src: [skidHissUri()], loop: true, volume: 0 });
     this.skidHiss.play();
-
-    this.music = new Howl({ src: [renderMusicUri()], loop: true, volume: 0.3 });
-    this.music.play();
+    this.skidSqueal = new Howl({ src: [skidSquealUri()], loop: true, volume: 0 });
+    this.skidSqueal.play();
 
     const rn = new Buf(2.6).noise(0, 2.6, 0.4, 0, 0.12).fadeLoop(60);
     this.rain = new Howl({ src: [rn.uri()], loop: true, volume: 0 });
@@ -430,6 +316,9 @@ class AudioManager {
         volume: 0.34,
       }),
     ];
+    // the city has a soundtrack from second one — the radio starts live
+    this.radioOn = true;
+    this.radios[this.radioIdx].play();
 
     const S: [SfxName, () => string][] = [
       ["click", () => new Buf(0.08).tone(0, 0.07, 950, 700, 0.16, "square", 30).uri()],
@@ -511,31 +400,18 @@ class AudioManager {
 
   /** amount 0..1, speedNorm 0..1 — groan at low speed, hiss at high */
   setSkid(amount: number, speedNorm = 0) {
-    if (!this.ready || !this.skidGroan || !this.skidHiss) return;
+    if (!this.ready || !this.skidGroan || !this.skidHiss || !this.skidSqueal) return;
     this.skidAmt += (amount - this.skidAmt) * 0.25;
     const t = Date.now() / 1000;
     const jG = 0.88 + 0.12 * Math.sin(t * 19.7);
     const jH = 0.88 + 0.12 * Math.sin(t * 27.3 + 2);
+    const jS = 0.82 + 0.18 * Math.sin(t * 34.1 + 4);
     this.skidGroan.rate(0.85 + speedNorm * 0.5);
     this.skidHiss.rate(0.9 + speedNorm * 0.7);
+    this.skidSqueal.rate(0.9 + speedNorm * 0.45);
     this.skidGroan.volume(Math.min(0.42, this.skidAmt * (0.55 - 0.22 * speedNorm) * jG));
     this.skidHiss.volume(Math.min(0.4, this.skidAmt * (0.18 + 0.34 * speedNorm) * jH));
-  }
-
-  /** background music toggle — returns new state */
-  toggleMusic(): boolean {
-    if (!this.ready || !this.music) return this.musicOn;
-    this.musicOn = !this.musicOn;
-    if (this.musicOn) {
-      this.music.volume(0.3);
-      this.music.play();
-    } else {
-      this.music.fade(this.music.volume(), 0, 250);
-      setTimeout(() => {
-        if (!this.musicOn) this.music?.pause();
-      }, 300);
-    }
-    return this.musicOn;
+    this.skidSqueal.volume(Math.min(0.26, this.skidAmt * (0.3 + 0.4 * speedNorm) * jS));
   }
 
   setRain(on: boolean) {
@@ -554,14 +430,6 @@ class AudioManager {
     }
     this.radioOn = true;
     this.radios[this.radioIdx].play();
-    return RADIO_STATIONS[this.radioIdx];
-  }
-
-  nextStation(): string {
-    if (!this.ready) return RADIO_STATIONS[0];
-    this.radios[this.radioIdx].stop();
-    this.radioIdx = (this.radioIdx + 1) % this.radios.length;
-    if (this.radioOn) this.radios[this.radioIdx].play();
     return RADIO_STATIONS[this.radioIdx];
   }
 

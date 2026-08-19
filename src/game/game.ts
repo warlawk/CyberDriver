@@ -8,7 +8,7 @@ import { Effects } from "./effects";
 import { DeliverySystem } from "./delivery";
 import { HUD } from "./hud";
 import { AssetManager } from "./assets";
-import { audio } from "./audio";
+import { audio, RADIO_STATIONS } from "./audio";
 import { ObjectiveMarker } from "./marker";
 import { setAtmosphere } from "./particles";
 import type { GamePhase, HudSnapshot, RunStats } from "./utils";
@@ -155,6 +155,8 @@ export class Game {
       this.seed = Math.floor(Math.random() * 1e9);
       this.buildCity();
     }
+    // radio is live from the start — reflect it in the HUD
+    this.radioName = audio.radioOn ? RADIO_STATIONS[audio.radioIdx] : null;
     audio.play("start");
     this.money = 0;
     this.streak = 1;
@@ -254,17 +256,8 @@ export class Game {
       this.hornCool = 0.6;
     }
     if (e.code === "KeyR" && this.phase === "playing") {
-      if (audio.radioOn) {
-        this.radioName = audio.nextStation();
-      } else {
-        this.radioName = audio.toggleRadio();
-      }
+      this.radioName = audio.toggleRadio();
       this.hud.notify(this.radioName ? "TUNED TO " + this.radioName : "RADIO OFF", 0xff2e7e);
-    }
-    if (e.code === "KeyM") {
-      const on = audio.toggleMusic();
-      audio.play("click");
-      this.hud.notify(on ? 'MUSIC ON · "MIDNIGHT COURIER"' : "MUSIC OFF", on ? 0x38ff9e : 0x7f95c8);
     }
     if ((e.code === "KeyP" || e.code === "Escape") && (this.phase === "playing" || this.phase === "paused")) {
       if (this.phase === "playing") this.pause();

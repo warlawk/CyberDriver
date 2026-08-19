@@ -127,7 +127,6 @@ export default function App() {
               <Key k="SPACE" label="Handbrake drift" />
               <Key k="H" label="Horn" />
               <Key k="R" label="Radio" />
-              <Key k="M" label="Music" />
               <Key k="F" label="Debug" />
               <Key k="P" label="Pause" />
             </div>
