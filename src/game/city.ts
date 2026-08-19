@@ -16,8 +16,10 @@ import {
   concreteCanvas,
   paintAsphalt,
   carPaintCanvas,
+  barrierStripeCanvas,
   toTex,
 } from "./textures";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 /* ---------------- city constants ---------------- */
 export const BLOCKS = 7;
@@ -508,11 +510,39 @@ export function generateCity(seed: number): CityData {
     if (dotMesh.instanceColor) dotMesh.instanceColor.needsUpdate = true;
   });
 
-  /* --- parked cars (instanced + colliders) --- */
+  /* --- parked cars: real car silhouettes (merged body+cabin, instanced) --- */
   const parkedCount = 40;
+  const pcBody = new THREE.BoxGeometry(4.1, 0.9, 1.9).translate(0, 0.62, 0);
+  const pcSkirt = new THREE.BoxGeometry(4.35, 0.3, 1.82).translate(0, 0.22, 0);
+  const pcCabin = new THREE.BoxGeometry(2.2, 0.62, 1.62).translate(-0.2, 1.36, 0);
+  const pcBodyGeo = mergeGeometries([pcBody, pcSkirt, pcCabin])!;
+  const pcGlassGeo = new THREE.BoxGeometry(2.0, 0.3, 1.68).translate(-0.2, 1.48, 0);
+  const pcTailGeo = mergeGeometries([
+    new THREE.BoxGeometry(0.1, 0.18, 0.42).translate(-2.06, 0.72, 0.6),
+    new THREE.BoxGeometry(0.1, 0.18, 0.42).translate(-2.06, 0.72, -0.6),
+  ])!;
+  const pcHeadGeo = mergeGeometries([
+    new THREE.BoxGeometry(0.1, 0.18, 0.42).translate(2.06, 0.72, 0.6),
+    new THREE.BoxGeometry(0.1, 0.18, 0.42).translate(2.06, 0.72, -0.6),
+  ])!;
   const parked = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(4.4, 1.35, 1.95),
+    pcBodyGeo,
     new THREE.MeshLambertMaterial({ color: 0xffffff }),
+    parkedCount
+  );
+  const parkedGlass = new THREE.InstancedMesh(
+    pcGlassGeo,
+    new THREE.MeshBasicMaterial({ color: 0x7fc4e8 }),
+    parkedCount
+  );
+  const parkedTail = new THREE.InstancedMesh(
+    pcTailGeo,
+    new THREE.MeshBasicMaterial({ color: 0x881122 }),
+    parkedCount
+  );
+  const parkedHead = new THREE.InstancedMesh(
+    pcHeadGeo,
+    new THREE.MeshLambertMaterial({ color: 0x39415a }),
     parkedCount
   );
   for (let i = 0; i < parkedCount; i++) {
@@ -528,60 +558,104 @@ export function generateCity(seed: number): CityData {
       i--;
       continue;
     }
-    dummy.position.set(px, 0.72, pz);
+    dummy.position.set(px, 0.03, pz);
     dummy.rotation.set(0, axisH ? (side > 0 ? 0 : Math.PI) : side > 0 ? Math.PI / 2 : -Math.PI / 2, 0);
     dummy.updateMatrix();
     parked.setMatrixAt(i, dummy.matrix);
     parked.setColorAt(i, cTmp.setHex(pick(rng, CAR_COLORS)));
-    colliders.push({ kind: "circle", x: px, z: pz, r: 2.4 });
+    parkedGlass.setMatrixAt(i, dummy.matrix);
+    parkedTail.setMatrixAt(i, dummy.matrix);
+    parkedHead.setMatrixAt(i, dummy.matrix);
+    colliders.push({ kind: "circle", x: px, z: pz, r: 2.2 });
   }
-  group.add(parked);
+  group.add(parked, parkedGlass, parkedTail, parkedHead);
 
-  /* --- extra roadside parked cars (where the old barrier blocks used to sit) --- */
-  const pBodyGeo = new THREE.BoxGeometry(4.3, 0.95, 1.9);
-  const pCabinGeo = new THREE.BoxGeometry(2.15, 0.62, 1.62);
-  const pGlassMat = new THREE.MeshBasicMaterial({ color: 0x7fc4e8 });
-  const pGlassGeo = new THREE.BoxGeometry(1.95, 0.3, 1.68);
-  const pTailMat = new THREE.MeshBasicMaterial({ color: 0x881122 });
-  const pHeadMat = new THREE.MeshLambertMaterial({ color: 0x39415a });
-  const pLightGeo = new THREE.BoxGeometry(0.1, 0.18, 0.42);
+  /* --- construction barriers (proper barricades: feet, striped boards, lamp, cones) --- */
+  const boardTex = toTex(barrierStripeCanvas(), { repeatX: 2 });
+  const boardMat = new THREE.MeshLambertMaterial({
+    map: boardTex,
+    emissiveMap: boardTex,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.22,
+    color: 0xf8efe2,
+  });
+  const orangeMat = new THREE.MeshLambertMaterial({ color: 0xff7a1a });
+  const darkMetalMat = new THREE.MeshLambertMaterial({ color: 0x2c3550 });
+  const coneMat = new THREE.MeshLambertMaterial({ color: 0xff6a10, emissive: 0xff6a10, emissiveIntensity: 0.12 });
+  const coneBandMat = new THREE.MeshLambertMaterial({ color: 0xf2f4fb });
+  const boardGeo = new THREE.BoxGeometry(6.4, 0.55, 0.14);
+  const bPostGeo = new THREE.BoxGeometry(0.16, 1.05, 0.16);
+  const bFootGeo = new THREE.BoxGeometry(0.5, 0.12, 1.1);
+  const lampPostGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
+  const bLampGeo = new THREE.SphereGeometry(0.22, 8, 8);
+  const coneGeo = new THREE.ConeGeometry(0.34, 0.85, 10);
+  const coneBandGeo = new THREE.CylinderGeometry(0.21, 0.25, 0.14, 10);
   const nearRoadLine = (v: number) => lines.some((l) => Math.abs(v - l) < 12);
-  let placedExtras = 0;
-  let extraGuard = 0;
-  while (placedExtras < 4 && extraGuard++ < 80) {
+  let placedBarriers = 0;
+  let barrierGuard = 0;
+  while (placedBarriers < 4 && barrierGuard++ < 80) {
     const axisH = chance(rng, 0.5);
     const line = lines[randInt(rng, 1, BLOCKS - 1)];
     const along = rand(rng, -HALF_ROAD * 0.6, HALF_ROAD * 0.6);
     if (nearRoadLine(along)) continue; // keep intersections clear
     const side = chance(rng, 0.5) ? 1 : -1;
-    const bx = axisH ? along : line + side * (ROAD_W / 2 - 2.1);
-    const bz = axisH ? line + side * (ROAD_W / 2 - 2.1) : along;
-    placedExtras++;
+    const bx = axisH ? along : line + side * (ROAD_W / 2 - 2.4);
+    const bz = axisH ? line + side * (ROAD_W / 2 - 2.4) : along;
+    placedBarriers++;
 
-    const paint = new THREE.MeshLambertMaterial({
-      map: toTex(carPaintCanvas("#" + pick(rng, CAR_COLORS).toString(16).padStart(6, "0"), rng)),
-      color: 0xe8ecf8,
+    const bar = new THREE.Group();
+    for (const sx of [-2.7, 2.7]) {
+      const foot = new THREE.Mesh(bFootGeo, darkMetalMat);
+      foot.position.set(sx, 0.06, 0);
+      const post = new THREE.Mesh(bPostGeo, orangeMat);
+      post.position.set(sx, 0.6, 0);
+      bar.add(foot, post);
+    }
+    const upper = new THREE.Mesh(boardGeo, boardMat);
+    upper.position.set(0, 1.02, 0);
+    const lower = new THREE.Mesh(boardGeo, boardMat);
+    lower.position.set(0, 0.42, 0);
+    const lampPost = new THREE.Mesh(lampPostGeo, darkMetalMat);
+    lampPost.position.set(2.7, 1.35, 0);
+    const lampMat = new THREE.MeshBasicMaterial({ color: 0xffa028 });
+    const lampB = new THREE.Mesh(bLampGeo, lampMat);
+    lampB.position.set(2.7, 1.72, 0);
+    bar.add(upper, lower, lampPost, lampB);
+    bar.position.set(bx, 0, bz);
+    bar.rotation.y = axisH ? 0 : Math.PI / 2;
+    group.add(bar);
+
+    colliders.push({
+      kind: "box",
+      minX: bx - (axisH ? 3.3 : 0.55),
+      maxX: bx + (axisH ? 3.3 : 0.55),
+      minZ: bz - (axisH ? 0.55 : 3.3),
+      maxZ: bz + (axisH ? 0.55 : 3.3),
     });
-    const car = new THREE.Group();
-    const body = new THREE.Mesh(pBodyGeo, paint);
-    body.position.y = 0.62;
-    const cabin = new THREE.Mesh(pCabinGeo, paint);
-    cabin.position.set(-0.25, 1.32, 0);
-    const glass = new THREE.Mesh(pGlassGeo, pGlassMat);
-    glass.position.set(-0.25, 1.44, 0);
-    const t1 = new THREE.Mesh(pLightGeo, pTailMat);
-    t1.position.set(-2.16, 0.72, 0.6);
-    const t2 = t1.clone();
-    t2.position.z = -0.6;
-    const h1 = new THREE.Mesh(pLightGeo, pHeadMat);
-    h1.position.set(2.16, 0.72, 0.6);
-    const h2 = h1.clone();
-    h2.position.z = -0.6;
-    car.add(body, cabin, glass, t1, t2, h1, h2);
-    car.position.set(bx, 0.03, bz);
-    car.rotation.y = axisH ? (side > 0 ? 0 : Math.PI) : side > 0 ? Math.PI / 2 : -Math.PI / 2;
-    group.add(car);
-    colliders.push({ kind: "circle", x: bx, z: bz, r: 2.3 });
+
+    const ph = rng() * 8;
+    animators.push((t) => {
+      lampMat.color.setHex(Math.sin(t * 5 + ph) > 0 ? 0xffa028 : 0x331a04);
+    });
+
+    // a traffic cone kicked out toward the live lane
+    if (chance(rng, 0.8)) {
+      const endOff = rand(rng, 3.7, 4.7) * (chance(rng, 0.5) ? 1 : -1);
+      const latOff = side * (ROAD_W / 2 - 1.15);
+      const cone = new THREE.Group();
+      const body = new THREE.Mesh(coneGeo, coneMat);
+      body.position.y = 0.42;
+      const band = new THREE.Mesh(coneBandGeo, coneBandMat);
+      band.position.y = 0.48;
+      cone.add(body, band);
+      cone.position.set(
+        axisH ? along + endOff : bx + (latOff - side * (ROAD_W / 2 - 2.4)),
+        0.02,
+        axisH ? bz + (latOff - side * (ROAD_W / 2 - 2.4)) : along + endOff
+      );
+      cone.rotation.y = rng() * Math.PI;
+      group.add(cone);
+    }
   }
 
   /* --- perimeter guard rails with neon strip --- */
