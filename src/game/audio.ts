@@ -376,7 +376,7 @@ export type SfxName =
   | "cash"
   | "chatter";
 
-export const RADIO_STATIONS = ["track 1", "track 2", "track 3"];
+export const RADIO_STATIONS = ["mainline dark", "k light", "dirty"];
 
 class AudioManager {
   private one: Partial<Record<SfxName, Howl>> = {};
@@ -398,13 +398,13 @@ class AudioManager {
   masterVol = 1.0;
   musicVol = 1.0;
   sfxVol = 1.0;
-  private readonly MUSIC_MAX = 0.2; // music never exceeds 80% even at slider 100%
+  readonly MUSIC_MAX = 0.3; // music never exceeds 30% even at slider 100%
 
   /** must be called from a user gesture */
   unlock() {
     if (this.ready) return;
     this.ready = true;
-    Howler.volume(0.85);
+    Howler.volume(0.85 * this.masterVol);
 
     this.engine = new Howl({ src: [engineLoopUri()], loop: true, volume: 0 });
     this.engine.play();
@@ -599,7 +599,7 @@ class AudioManager {
   /** update volumes for music tracks */
   updateMusicVolume() {
     if (!this.ready) return;
-    const vol = this.MUSIC_MAX * this.musicVol * this.masterVol;
+    const vol = this.MUSIC_MAX * this.musicVol;
     if (this.radioOn && this.radioIdx >= 0 && this.radioIdx < this.radios.length) {
       this.radios[this.radioIdx].volume(vol);
     }

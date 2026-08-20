@@ -88,6 +88,8 @@ export default function App() {
       });
       gameRef.current = game;
       await game.init();
+      // Start music immediately on title screen after init
+      audio.unlock();
     })();
     return () => {
       mounted = false;
@@ -191,6 +193,10 @@ export default function App() {
 
             <div className="mt-8 font-body text-[12px] tracking-[0.28em] text-[#42558a] uppercase">
               Three.js world · PixiJS HUD · Howler audio · particles.js atmosphere · glTF assets
+            </div>
+
+            <div className="mt-4 font-body text-[11px] tracking-[0.25em] text-[#3a4d7a] uppercase">
+              Thanks to mobygratis for the music tracks
             </div>
           </div>
         </div>
