@@ -474,6 +474,31 @@ export class HUD {
     md.circle(px, pz, 9).stroke({ color: CYAN, alpha: 0.5, width: 1.4 });
     md.poly([px, pz - 9, px + 5.6, pz + 7, px, pz + 3, px - 5.6, pz + 7]).fill({ color: 0xeafcff });
 
+    // destination-direction chevron: orbits the player marker and rotates to
+    // face the objective, so the heading is obvious even when the target ring
+    // is off the visible circle. Computed in local map space so the container
+    // rotation applies equally to it and the target.
+    if (last) {
+      const dx = this.mapPx(last.x) - px;
+      const dy = this.mapPx(last.z) - pz;
+      const mDist = Math.hypot(dx, dy);
+      if (mDist > 14) {
+        const dir = Math.atan2(dy, dx);
+        const theta = dir + Math.PI / 2; // tip is drawn pointing up (-y)
+        const rc = 24 + Math.sin(this.t * 6) * 2;
+        const ccx = px + Math.cos(dir) * rc;
+        const ccz = pz + Math.sin(dir) * rc;
+        const cs2 = Math.cos(theta);
+        const sn2 = Math.sin(theta);
+        const chev = [0, -8, 6.2, 5.4, 0, 1.6, -6.2, 5.4];
+        const world: number[] = [];
+        for (let i = 0; i < chev.length; i += 2) {
+          world.push(ccx + chev[i] * cs2 - chev[i + 1] * sn2, ccz + chev[i] * sn2 + chev[i + 1] * cs2);
+        }
+        md.poly(world).fill({ color: isPickup ? CYAN : GREEN, alpha: 0.85 });
+      }
+    }
+
     // speedo
     const kmh = clamp(s.speedKmh, 0, 180);
     setText(this.kmhTxt, String(Math.round(kmh)));
