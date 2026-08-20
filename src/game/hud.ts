@@ -53,6 +53,7 @@ export class HUD {
   private mapWorld = new Container(); // rotates with the player
   private mapClip = new Graphics(); // circular window
   private mapRim = new Graphics(); // fixed bezel, ticks, vignette
+  private playerG = new Graphics(); // screen-fixed player dart (heading rotation)
   private mapContainer = new Container();
   private extent = 210;
 
@@ -213,7 +214,7 @@ export class HUD {
     // fixed "you are heading this way" marker at 12 o'clock
     rim.poly([mcx, mcy - R + 3, mcx - 6, mcy - R + 13, mcx + 6, mcy - R + 13]).fill({ color: CYAN, alpha: 0.9 });
 
-    this.mapContainer.addChild(frame, this.mapClip, this.mapWorld, rim, mlabel);
+    this.mapContainer.addChild(frame, this.mapClip, this.mapWorld, rim, this.playerG, mlabel);
     this.mapContainer.position.set(this.mapX, this.mapY);
     this.redrawMap();
 
@@ -467,37 +468,22 @@ export class HUD {
       md.circle(tx, tz, pr).stroke({ color: isPickup ? CYAN : GREEN, width: 2.4 });
       md.circle(tx, tz, 2.6).fill({ color: isPickup ? CYAN : GREEN });
     }
-    // player marker: the container rotation already aims it up-screen,
-    // so the dart is drawn pointing straight up in local space
-    const px = this.mapPx(s.px);
-    const pz = this.mapPx(s.pz);
-    md.circle(px, pz, 9).stroke({ color: CYAN, alpha: 0.5, width: 1.4 });
-    md.poly([px, pz - 9, px + 5.6, pz + 7, px, pz + 3, px - 5.6, pz + 7]).fill({ color: 0xeafcff });
-
-    // destination-direction chevron: orbits the player marker and rotates to
-    // face the objective, so the heading is obvious even when the target ring
-    // is off the visible circle. Computed in local map space so the container
-    // rotation applies equally to it and the target.
-    if (last) {
-      const dx = this.mapPx(last.x) - px;
-      const dy = this.mapPx(last.z) - pz;
-      const mDist = Math.hypot(dx, dy);
-      if (mDist > 14) {
-        const dir = Math.atan2(dy, dx);
-        const theta = dir + Math.PI / 2; // tip is drawn pointing up (-y)
-        const rc = 24 + Math.sin(this.t * 6) * 2;
-        const ccx = px + Math.cos(dir) * rc;
-        const ccz = pz + Math.sin(dir) * rc;
-        const cs2 = Math.cos(theta);
-        const sn2 = Math.sin(theta);
-        const chev = [0, -8, 6.2, 5.4, 0, 1.6, -6.2, 5.4];
-        const world: number[] = [];
-        for (let i = 0; i < chev.length; i += 2) {
-          world.push(ccx + chev[i] * cs2 - chev[i + 1] * sn2, ccz + chev[i] * sn2 + chev[i + 1] * cs2);
-        }
-        md.poly(world).fill({ color: isPickup ? CYAN : GREEN, alpha: 0.85 });
-      }
+    // player marker lives on a screen-fixed layer: the white dart tracks the
+    // van's heading exactly like the classic map did, rotating as you steer
+    const pg = this.playerG;
+    pg.clear();
+    const mx = this.mapSize / 2;
+    const my = this.mapSize / 2;
+    pg.circle(mx, my, 10).stroke({ color: CYAN, alpha: 0.45, width: 1.4 });
+    const prot = -s.heading;
+    const pcs = Math.cos(prot);
+    const psn = Math.sin(prot);
+    const ppts = [0, 9, 6.5, -7, 0, -3.5, -6.5, -7];
+    const pworld: number[] = [];
+    for (let i = 0; i < ppts.length; i += 2) {
+      pworld.push(mx + ppts[i] * pcs - ppts[i + 1] * psn, my + ppts[i] * psn + ppts[i + 1] * pcs);
     }
+    pg.poly(pworld).fill({ color: 0xeafcff });
 
     // speedo
     const kmh = clamp(s.speedKmh, 0, 180);
