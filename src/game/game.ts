@@ -8,7 +8,7 @@ import { Effects } from "./effects";
 import { DeliverySystem } from "./delivery";
 import { HUD } from "./hud";
 import { AssetManager } from "./assets";
-import { audio, RADIO_STATIONS } from "./audio";
+import { audio } from "./audio";
 import { ObjectiveMarker } from "./marker";
 import { setAtmosphere } from "./particles";
 import type { GamePhase, HudSnapshot, RunStats } from "./utils";
@@ -156,8 +156,9 @@ export class Game {
       this.seed = Math.floor(Math.random() * 1e9);
       this.buildCity();
     }
-    // radio is live from the start — reflect it in the HUD
-    this.radioName = audio.radioOn ? RADIO_STATIONS[audio.radioIdx] : null;
+    // stop any playing radio tracks first to prevent overlap on restart
+    audio.stopAllRadios();
+    this.radioName = null;
     audio.play("start");
     this.money = 0;
     this.streak = 1;
@@ -177,6 +178,9 @@ export class Game {
     this.setPhase("countdown");
     audio.setEngineActive(true);
     audio.play("chatter");
+    // start radio track 1 immediately on game start (before countdown)
+    audio.startTrack(0, 0.42);
+    this.radioName = "track 1";
     this.hud.notify("DISPATCH: JOB #" + (this.delivery.mission?.id ?? 1), 0x26e6ff);
   }
 
@@ -206,6 +210,19 @@ export class Game {
     }
   }
 
+  pause() {
+    if (this.phase !== "playing") return;
+    audio.setMuted(true);
+    this.setPhase("paused");
+  }
+
+  resume() {
+    if (this.phase !== "paused") return;
+    audio.setMuted(false);
+    this.clock.getDelta();
+    this.setPhase("playing");
+  }
+
   private setPhase(p: GamePhase, cause = "") {
     this.phase = p;
     this.hooks.onPhase(p, this.currentStats(cause));
@@ -219,19 +236,6 @@ export class Game {
       elapsed: this.runTime,
       cause,
     };
-  }
-
-  pause() {
-    if (this.phase !== "playing") return;
-    audio.setMuted(true);
-    this.setPhase("paused");
-  }
-
-  resume() {
-    if (this.phase !== "paused") return;
-    audio.setMuted(false);
-    this.clock.getDelta();
-    this.setPhase("playing");
   }
 
   private gameOver(cause: string) {
@@ -316,6 +320,7 @@ export class Game {
         this.hud.update(this.snap, dt);
         if (this.countdownT <= -0.55) {
           this.hud.setCountdown(null);
+          // radio already started in startRun(), just transition to playing
           this.setPhase("playing");
         }
         break;

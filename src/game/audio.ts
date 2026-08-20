@@ -376,7 +376,7 @@ export type SfxName =
   | "cash"
   | "chatter";
 
-export const RADIO_STATIONS = ["NEON FM 88.1", "TURBO 112.5", "SYNTHWAVE 95.4"];
+export const RADIO_STATIONS = ["track 1", "track 2", "track 3"];
 
 class AudioManager {
   private one: Partial<Record<SfxName, Howl>> = {};
@@ -393,6 +393,12 @@ class AudioManager {
   radioIdx = 0;
   private rainTarget = 0;
   private skidAmt = 0;
+  
+  // Volume controls (0..1)
+  masterVol = 1.0;
+  musicVol = 1.0;
+  sfxVol = 1.0;
+  private readonly MUSIC_MAX = 0.2; // music never exceeds 80% even at slider 100%
 
   /** must be called from a user gesture */
   unlock() {
@@ -428,60 +434,29 @@ class AudioManager {
     this.ambience = new Howl({ src: [amb.uri()], loop: true, volume: 0.5 });
     this.ambience.play();
 
+    // Radio tracks — three MP3 tracks that can be toggled with R key
     this.radios = [
-      // driving synthwave — the city's default soundtrack
       new Howl({
-        src: [
-          radioTrack({
-            bpm: 104,
-            beats: 8,
-            bass: [33, 0, 36, 33, 31, 0, 36, 38],
-            arp: [57, 60, 64, 67, 64, 60, 67, 64],
-            hats: "8th",
-          }),
-        ],
+        src: ["src/snd/track1.mp3"],
         loop: true,
-        volume: 0.42,
+        volume: 0,
       }),
-      // punchy electro — 8th-note bass, 16th hats, claps
       new Howl({
-        src: [
-          radioTrack({
-            bpm: 112,
-            beats: 8,
-            bassEighths: [36, 0, 36, 0, 39, 0, 36, 0, 36, 0, 36, 0, 34, 0, 31, 0],
-            arp: [60, 63, 67, 70, 67, 63, 60, 63],
-            arpWave: "square",
-            arpVol: 0.042,
-            snareBeats: [2, 6],
-            hats: "16th",
-          }),
-        ],
+        src: ["src/snd/track2.mp3"],
         loop: true,
-        volume: 0.42,
+        volume: 0,
       }),
-      // dreamy slow wave — pads over a soft pulse
       new Howl({
-        src: [
-          radioTrack({
-            bpm: 88,
-            beats: 8,
-            bass: [45, 45, 0, 43, 41, 0, 43, 40],
-            arp: [69, 72, 76, 72, 69, 76, 72, 69],
-            hats: "8th",
-            pad: [
-              { beat: 0, midis: [57, 60, 64], durBeats: 4 },
-              { beat: 4, midis: [53, 57, 60], durBeats: 4 },
-            ],
-          }),
-        ],
+        src: ["src/snd/track3.mp3"],
         loop: true,
-        volume: 0.42,
+        volume: 0,
       }),
     ];
-    // the city has a soundtrack from second one — the radio starts live
+    // radio starts on and playing track 1 immediately
     this.radioOn = true;
-    this.radios[this.radioIdx].play();
+    this.radioIdx = 0;
+    this.radios[0].play();
+    this.radios[0].volume(this.MUSIC_MAX * this.musicVol * this.masterVol);
 
     const S: [SfxName, () => string][] = [
       ["click", () => new Buf(0.08).tone(0, 0.07, 950, 700, 0.16, "square", 30).uri()],
@@ -583,27 +558,88 @@ class AudioManager {
     this.rain.fade(this.rain.volume(), this.rainTarget, 1500);
   }
 
-  /** cycles NEON FM → TURBO → SYNTHWAVE → OFF → NEON FM…; returns station name or null when off */
+  /** cycles track 1 → track 2 → track 3 → OFF → track 1…; returns track name or null when off */
   toggleRadio(): string | null {
     if (!this.ready) return null;
-    this.radios[this.radioIdx].stop();
+    // stop current track if on
     if (this.radioOn) {
-      // next slot; the slot after the last station is "off"
-      this.radioIdx = (this.radioIdx + 1) % (this.radios.length + 1);
-      if (this.radioIdx === this.radios.length) {
-        this.radioOn = false;
-        return null;
-      }
-    } else {
-      this.radioIdx = this.radioIdx % this.radios.length;
-      this.radioOn = true;
+      this.radios[this.radioIdx].stop();
     }
+    // next slot; the slot after the last track is "off"
+    this.radioIdx = (this.radioIdx + 1) % (this.radios.length + 1);
+    if (this.radioIdx === this.radios.length) {
+      this.radioOn = false;
+      return null;
+    }
+    this.radioOn = true;
     this.radios[this.radioIdx].play();
+    this.radios[this.radioIdx].volume(this.MUSIC_MAX * this.musicVol * this.masterVol);
     return RADIO_STATIONS[this.radioIdx];
   }
 
-  setMuted(m: boolean) {
-    Howler.mute(m);
+  /** stop all radio tracks - called on death/restart */
+  stopAllRadios() {
+    for (const radio of this.radios) {
+      radio.stop();
+    }
+    this.radioOn = false;
+  }
+
+  /** start a specific track index at target volume */
+  startTrack(trackIdx: number, targetVol: number) {
+    if (!this.ready || trackIdx < 0 || trackIdx >= this.radios.length) return;
+    this.stopAllRadios();
+    this.radioIdx = trackIdx;
+    this.radioOn = true;
+    const howl = this.radios[trackIdx];
+    howl.play();
+    howl.volume(targetVol);
+  }
+
+  /** update volumes for music tracks */
+  updateMusicVolume() {
+    if (!this.ready) return;
+    const vol = this.MUSIC_MAX * this.musicVol * this.masterVol;
+    if (this.radioOn && this.radioIdx >= 0 && this.radioIdx < this.radios.length) {
+      this.radios[this.radioIdx].volume(vol);
+    }
+  }
+
+  /** set master volume and apply to all sounds */
+  setMasterVolume(v: number) {
+    this.masterVol = Math.max(0, Math.min(1, v));
+    Howler.volume(0.85 * this.masterVol);
+    this.updateMusicVolume();
+    // update SFX volumes
+    for (const sfx of Object.values(this.one)) {
+      if (sfx) {
+        const baseVol = sfx._sounds[0]?.volume ?? 0.6;
+        sfx.volume(baseVol * this.sfxVol * this.masterVol);
+      }
+    }
+  }
+
+  /** mute/unmute all audio */
+  setMuted(muted: boolean) {
+    if (!this.ready) return;
+    Howler.mute(muted);
+  }
+
+  /** set music volume (capped at MUSIC_MAX) */
+  setMusicVolume(v: number) {
+    this.musicVol = Math.max(0, Math.min(1, v));
+    this.updateMusicVolume();
+  }
+
+  /** set SFX volume */
+  setSfxVolume(v: number) {
+    this.sfxVol = Math.max(0, Math.min(1, v));
+    for (const [name, sfx] of Object.entries(this.one)) {
+      if (sfx) {
+        const baseVol = name === "explode" ? 0.9 : 0.6;
+        sfx.volume(baseVol * this.sfxVol * this.masterVol);
+      }
+    }
   }
 
   dispose() {
