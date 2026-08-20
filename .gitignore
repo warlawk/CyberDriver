@@ -2,7 +2,7 @@
 # Dependencies
 node_modules/
 
-# Build artifacts
+# Build outputs
 dist/
 build/
 target/
@@ -12,7 +12,6 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.py.class
 .Python
 env/
 venv/
@@ -27,73 +26,203 @@ nosetests.xml
 coverage.xml
 *.cover
 *.log
-*.tmp
-*.swp
-*.swo
+*.pot
+*.po
+*~
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+
+# Logs
+*.log
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Icon?
+.directory
+.fuse_hidden*
+
+# Environment variables
 .env
 .env.local
 .env.*
+
+# IDE
 .vscode/
 .idea/
-.mypy_cache/
-.pytest_cache/
-.hypothesis/
+*.swp
+*.swo
+*.tmp
 
-# Node.js
+# Testing
+coverage/
+htmlcov/
+.coveralls.yml
+
+# Distribution / packaging
+.pybuild/
+.deps/
+.installed.cfg
+lib/
+lib64/
+pypy-*
+*.so
+.Python
+*.egg-info/
+.eggs/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+bin/
+share/python-wheels/
+wheels/
+*.egg
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+.coveralls.yml
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# celery beat schedule
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Local configuration file (sdkh)
+.settings.xml
+
+# Temporary folders
+tmp/
+temp/
+
+# Rust/Cargo (if applicable)
+Cargo.lock
+target/
+
+# Go (if applicable)
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Java/Maven (if applicable)
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+replay_pid*
+
+# C/C++ (if applicable)
+*.o
+*.a
+*.obj
+*.out
+*.ilk
+*.pdb
+*.gch
+*.gtest
+*.cache
+*.stackdump
+*.idb
+*.pdb
+*.aps
+*.ncb
+*.opt
+*.plg
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp.*
+*.log
+*.exp
+*.lib
+*.map
+*.dyn
+*.stackdump
+*.res
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.vcxproj.filters
+*.VC.db
+*.VC.VC.opendb
+
+# Webpack
+webpack-stats.json
+
+# Jest
+coverage/
+junit.xml
+*.lcov
+
+# Bower
+bower_components/
+
+# Grunt
+Gruntfile.js~*
+grunt.js~*
+
+# NPM
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-node_modules/
+
+# Ember
+tmp/
 dist/
-build/
-*.min.js
-*.min.css
-.nyc_output/
-coverage/
-lib-cov/
-
-# TypeScript/JavaScript
-*.tsbuildinfo
-.next/
-.nuxt/
-public/
-out/
-output/
-.svelte-kit/
-.vercel/
-netlify/
-
-# General
+logs/
 *.log
-*.tmp
+.travis.yml
+node_modules/
+
+# Database
+*.db
+*.db-journal
+
+# Backup files
+*.bak
 *.swp
 *.swo
-.DS_Store
-Thumbs.db
-.env
-.env.local
-.env.*
-.vscode/
-.idea/
-coverage/
-htmlcov/
-*.tar*
-*.zip
-*.gz
-*.7z
-*.rar
-*.bz2
-*.xz
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
+*~
+
+# Compiled binary files
+*.exe
+*.dll
+*.so
+*.a
+*.obj
+*.out
 ```

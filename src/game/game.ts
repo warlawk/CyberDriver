@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { Howler } from "howler";
 import { World } from "./world";
 import { generateCity, HALF_ROAD } from "./city";
 import type { CityData } from "./utils";
@@ -36,6 +37,11 @@ export interface GameHooks {
   onPhase: (phase: GamePhase, stats: RunStats) => void;
   onDebugToggle: (on: boolean) => void;
   onDebug: (lines: string[]) => void;
+}
+
+// Expose audio manager for debug access
+export function getAudioManager() {
+  return audio;
 }
 
 const TOP_KMH = 165;
@@ -179,7 +185,8 @@ export class Game {
     audio.setEngineActive(true);
     audio.play("chatter");
     // start radio track 1 immediately on game start (before countdown)
-    audio.startTrack(0, 0.42);
+    const am = getAudioManager();
+    audio.startTrack(0, am.MUSIC_MAX * am.musicVol * am.masterVol);
     this.radioName = "track 1";
     this.hud.notify("DISPATCH: JOB #" + (this.delivery.mission?.id ?? 1), 0x26e6ff);
   }
@@ -212,13 +219,13 @@ export class Game {
 
   pause() {
     if (this.phase !== "playing") return;
-    audio.setMuted(true);
+    // Don't mute audio - let music continue through pause menu
     this.setPhase("paused");
   }
 
   resume() {
     if (this.phase !== "paused") return;
-    audio.setMuted(false);
+    // No need to unmute since we didn't mute
     this.clock.getDelta();
     this.setPhase("playing");
   }
@@ -260,7 +267,7 @@ export class Game {
       audio.play("horn");
       this.hornCool = 0.6;
     }
-    if (e.code === "KeyR" && this.phase === "playing") {
+    if (e.code === "KeyR" && (this.phase === "playing" || this.phase === "countdown")) {
       this.radioName = audio.toggleRadio();
       this.hud.notify(this.radioName ? "TUNED TO " + this.radioName : "RADIO OFF", 0xff2e7e);
     }
@@ -337,6 +344,9 @@ export class Game {
     this.world.render(dt);
 
     if (this.debugOn && ++this.debugFrame % 6 === 0) {
+      const am = getAudioManager();
+      const currentRadio = am.radios[am.radioIdx];
+      const radioVol = currentRadio ? currentRadio.volume() : -1;
       this.hooks.onDebug([
         `FPS       ${this.fps.toFixed(0)}`,
         `SPEED     ${this.snap.speedKmh.toFixed(0)} km/h`,
@@ -346,6 +356,16 @@ export class Game {
         `GLTF      ${this.assets.loadedGltf} loaded`,
         `DRAWCALLS ${this.world.renderer.info.render.calls}`,
         `INTEGRITY ${Math.max(0, Math.round((this.integrity / this.maxIntegrity) * 100))}%`,
+        `AUDIO READY ${am.ready}`,
+        `MUSIC_MAX ${am.MUSIC_MAX}`,
+        `masterVol ${am.masterVol.toFixed(2)}`,
+        `musicVol  ${am.musicVol.toFixed(2)}`,
+        `sfxVol    ${am.sfxVol.toFixed(2)}`,
+        `Howler vol ${Howler.volume().toFixed(3)}`,
+        `radioOn   ${am.radioOn}`,
+        `radioIdx  ${am.radioIdx}`,
+        `radio track vol ${radioVol.toFixed(3)}`,
+        `expected vol ${(am.MUSIC_MAX * am.musicVol * am.masterVol).toFixed(3)}`,
       ]);
     }
   };
