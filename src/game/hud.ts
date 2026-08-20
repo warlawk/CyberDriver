@@ -468,22 +468,14 @@ export class HUD {
       md.circle(tx, tz, pr).stroke({ color: isPickup ? CYAN : GREEN, width: 2.4 });
       md.circle(tx, tz, 2.6).fill({ color: isPickup ? CYAN : GREEN });
     }
-    // player marker lives on a screen-fixed layer: the white dart tracks the
-    // van's heading exactly like the classic map did, rotating as you steer
+    // player marker: fixed at the circle center, always pointing straight up.
+    // The world rotates around it as the player steers — classic GPS illusion.
     const pg = this.playerG;
     pg.clear();
     const mx = this.mapSize / 2;
     const my = this.mapSize / 2;
     pg.circle(mx, my, 10).stroke({ color: CYAN, alpha: 0.45, width: 1.4 });
-    const prot = -s.heading;
-    const pcs = Math.cos(prot);
-    const psn = Math.sin(prot);
-    const ppts = [0, 9, 6.5, -7, 0, -3.5, -6.5, -7];
-    const pworld: number[] = [];
-    for (let i = 0; i < ppts.length; i += 2) {
-      pworld.push(mx + ppts[i] * pcs - ppts[i + 1] * psn, my + ppts[i] * psn + ppts[i + 1] * pcs);
-    }
-    pg.poly(pworld).fill({ color: 0xeafcff });
+    pg.poly([mx, my - 9, mx + 6.5, my + 7, mx, my + 3.5, mx - 6.5, my + 7]).fill({ color: 0xeafcff });
 
     // speedo
     const kmh = clamp(s.speedKmh, 0, 180);
