@@ -1,12 +1,53 @@
 import { useEffect, useRef, useState } from "react";
 import { Game } from "./game/game";
 import type { GamePhase, RunStats } from "./game/utils";
+import { audio } from "./game/audio";
 
 function Key({ k, label }: { k: string; label: string }) {
   return (
     <div className="flex items-center gap-2">
       <span className="keycap">{k}</span>
       <span className="text-[13px] tracking-wide text-[#8fa6d8] uppercase font-semibold">{label}</span>
+    </div>
+  );
+}
+
+interface VolumeState {
+  master: number;
+  music: number;
+  sfx: number;
+}
+
+function VolumeSlider({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 w-full max-w-[220px]">
+      <span className="font-display text-[9px] tracking-[0.25em] text-[#7f95c8] uppercase w-[48px] text-right">
+        {label}
+      </span>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.01"
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="flex-1 h-[6px] bg-[rgba(38,230,255,0.15)] rounded-full appearance-none cursor-pointer
+                   [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-[14px] 
+                   [&::-webkit-slider-thumb]:h-[14px] [&::-webkit-slider-thumb]:rounded-full 
+                   [&::-webkit-slider-thumb]:bg-[#26e6ff] [&::-webkit-slider-thumb]:cursor-pointer
+                   [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(38,230,255,0.6)]"
+      />
+      <span className="font-mono text-[10px] text-[#26e6ff] w-[32px]">
+        {Math.round(value * 100)}%
+      </span>
     </div>
   );
 }
@@ -19,6 +60,11 @@ export default function App() {
   const [phase, setPhase] = useState<GamePhase>("title");
   const [stats, setStats] = useState<RunStats | null>(null);
   const [debugOn, setDebugOn] = useState(false);
+  const [volumeState, setVolumeState] = useState<VolumeState>({
+    master: 1.0,
+    music: 1.0,
+    sfx: 1.0,
+  });
 
   useEffect(() => {
     let game: Game | null = null;
@@ -165,6 +211,39 @@ export default function App() {
             </button>
             <div className="mt-4 text-[12px] tracking-[0.25em] text-[#42558a] font-body uppercase">
               P / ESC to resume
+            </div>
+            
+            {/* Volume Controls */}
+            <div className="mt-8 pt-6 border-t border-[rgba(38,230,255,0.2)]">
+              <div className="font-display text-[10px] tracking-[0.3em] text-[#7f95c8] mb-4 uppercase">
+                Audio Levels
+              </div>
+              <div className="flex flex-col gap-3 items-center">
+                <VolumeSlider
+                  label="Master"
+                  value={volumeState.master}
+                  onChange={(v) => {
+                    setVolumeState(prev => ({ ...prev, master: v }));
+                    audio.setMasterVolume(v);
+                  }}
+                />
+                <VolumeSlider
+                  label="Music"
+                  value={volumeState.music}
+                  onChange={(v) => {
+                    setVolumeState(prev => ({ ...prev, music: v }));
+                    audio.setMusicVolume(v);
+                  }}
+                />
+                <VolumeSlider
+                  label="SFX"
+                  value={volumeState.sfx}
+                  onChange={(v) => {
+                    setVolumeState(prev => ({ ...prev, sfx: v }));
+                    audio.setSfxVolume(v);
+                  }}
+                />
+              </div>
             </div>
           </div>
         </div>
