@@ -211,8 +211,7 @@ export class HUD {
     }
     rim.circle(mcx, mcy, R).stroke({ color: CYAN, alpha: 0.6, width: 2 });
     rim.circle(mcx, mcy, R + 4).stroke({ color: 0x182647, width: 2 });
-    // fixed "you are heading this way" marker at 12 o'clock
-    rim.poly([mcx, mcy - R + 3, mcx - 6, mcy - R + 13, mcx + 6, mcy - R + 13]).fill({ color: CYAN, alpha: 0.9 });
+
 
     this.mapContainer.addChild(frame, this.mapClip, this.mapWorld, rim, this.playerG, mlabel);
     this.mapContainer.position.set(this.mapX, this.mapY);
